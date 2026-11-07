@@ -29,10 +29,27 @@ class ExportRedirectsCommand extends Command
             return self::FAILURE;
         }
 
-        $redirects = array_values(Redirect::query()->orderBy('id')->get()->all());
+        $redirects = [];
+        $leftOut = 0;
+
+        foreach (Redirect::query()->orderBy('id')->get() as $redirect) {
+            if ($this->isSafe($redirect->from_path) && $this->isSafe($redirect->to_path)) {
+                $redirects[] = $redirect;
+            } else {
+                $leftOut++;
+            }
+        }
+
+        // Warnings go to stderr, so a redirected export stays a clean configuration file.
+        if ($leftOut > 0 && $format !== 'csv') {
+            $this->output->getErrorStyle()->writeln(sprintf(
+                '<comment>%d redirects left out: their paths contain line breaks, control characters, quotes or backslashes, which could change the server configuration.</comment>',
+                $leftOut,
+            ));
+        }
 
         $content = match ($format) {
-            'csv' => $this->csv($redirects),
+            'csv' => $this->csv(array_values(Redirect::query()->orderBy('id')->get()->all())),
             'nginx' => $this->nginx($redirects),
             default => $this->apache($redirects),
         };
@@ -138,7 +155,8 @@ class ExportRedirectsCommand extends Command
 
         foreach ($redirects as $redirect) {
             $flags = 'R='.$redirect->status_code.',L,NE';
-            $to = $this->quote($redirect->to_path);
+            // mod_rewrite reads $N and %N in the target as back-references; escaped they stay literal.
+            $to = str_replace(['$', '%'], ['\\$', '\\%'], $redirect->to_path);
             $mark = strpos($redirect->from_path, '?');
 
             if ($mark !== false) {
@@ -159,12 +177,29 @@ class ExportRedirectsCommand extends Command
     private function encodeUri(string $path): string
     {
         $mark = strpos($path, '?');
-        $query = $mark === false ? '' : substr($path, $mark);
+        $query = $mark === false ? '' : substr($path, $mark + 1);
         $path = $mark === false ? $path : substr($path, 0, $mark);
 
         $encoded = implode('/', array_map(rawurlencode(...), explode('/', $path)));
 
-        return $encoded.str_replace(['"', ' ', '$', '\\'], ['%22', '%20', '%24', '%5C'], $query);
+        if ($mark === false) {
+            return $encoded;
+        }
+
+        return $encoded.'?'.(string) preg_replace_callback(
+            '/[^A-Za-z0-9._~=&-]/',
+            fn (array $matches): string => rawurlencode($matches[0]),
+            $query,
+        );
+    }
+
+    /**
+     * Paths that could end a line or a quoted string in a server
+     * configuration are never written there.
+     */
+    private function isSafe(string $path): bool
+    {
+        return preg_match('/[\x00-\x1f\x7f"\\\\]/', $path) !== 1;
     }
 
     /**
