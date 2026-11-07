@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Storage;
+use ItsJustVita\WpMigrator\Content\Urls\AuthorReference;
 use ItsJustVita\WpMigrator\Content\Urls\PostReference;
+use ItsJustVita\WpMigrator\Content\Urls\TermReference;
 use ItsJustVita\WpMigrator\Content\Urls\UrlResolver;
 use ItsJustVita\WpMigrator\Content\Urls\UrlRewriter;
 use ItsJustVita\WpMigrator\Import\ImportContext;
@@ -14,6 +16,16 @@ final class OnlyPagesUrlResolver implements UrlResolver
     public function forPost(PostReference $post): ?string
     {
         return $post->type === 'page' ? '/seiten/'.$post->id : null;
+    }
+
+    public function forTerm(TermReference $term): ?string
+    {
+        return null;
+    }
+
+    public function forAuthor(AuthorReference $author): ?string
+    {
+        return null;
     }
 }
 

@@ -8,6 +8,7 @@ use Illuminate\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use ItsJustVita\WpMigrator\Content\Blocks\Block;
+use ItsJustVita\WpMigrator\Fields\FieldResolver;
 use ItsJustVita\WpMigrator\Import\ImportContext;
 use ItsJustVita\WpMigrator\Import\SourceType;
 use ItsJustVita\WpMigrator\Mapping\Concerns\StoresSourceTimestamps;
@@ -15,8 +16,6 @@ use ItsJustVita\WpMigrator\Models\Media;
 use ItsJustVita\WpMigrator\Models\Post;
 use ItsJustVita\WpMigrator\Models\Term;
 use ItsJustVita\WpMigrator\Source\Dto\SourcePost;
-use ItsJustVita\WpMigrator\Support\MalformedSerializedValue;
-use ItsJustVita\WpMigrator\Support\Serialized;
 use ItsJustVita\WpMigrator\Support\WpDates;
 
 /**
@@ -29,7 +28,10 @@ class DefaultPostMapper implements PostMapper
     /** Statuses whose post_date is a publish date. */
     protected const array PUBLISHED_STATUSES = ['publish', 'future', 'private'];
 
-    public function __construct(protected readonly Repository $config) {}
+    public function __construct(
+        protected readonly Repository $config,
+        protected readonly FieldResolver $fields,
+    ) {}
 
     public function map(SourcePost $post, ImportContext $context): ?Model
     {
@@ -88,34 +90,13 @@ class DefaultPostMapper implements PostMapper
     }
 
     /**
-     * Plain post meta: keys starting with "_" are internal to WP and plugins
-     * and only copied when allow-listed. Serialized values are decoded; keys
-     * with several rows become lists.
+     * The resolved fields of the post, or its plain meta when nothing resolved them.
      *
      * @return array<string, mixed>
      */
     protected function fields(SourcePost $post, ImportContext $context): array
     {
-        $allowed = $this->config->array('wp-migrator.fields.allowed_internal_keys');
-        $excluded = $this->config->array('wp-migrator.fields.excluded_keys');
-
-        $fields = [];
-
-        foreach ($post->meta->toArray() as $key => $values) {
-            if (str_starts_with($key, '_') && ! Str::is($allowed, $key)) {
-                continue;
-            }
-
-            if (Str::is($excluded, $key)) {
-                continue;
-            }
-
-            $decoded = array_map(fn (string $value): mixed => $this->decode($post, $key, $value, $context), $values);
-
-            $fields[$key] = count($decoded) === 1 ? $decoded[0] : $decoded;
-        }
-
-        return $fields;
+        return $post->fields ?? $this->fields->plain($post->meta, $post->id, $context);
     }
 
     /**
@@ -134,16 +115,5 @@ class DefaultPostMapper implements PostMapper
         }
 
         return array_values(array_unique($ids));
-    }
-
-    private function decode(SourcePost $post, string $key, string $value, ImportContext $context): mixed
-    {
-        try {
-            return Serialized::decode($value);
-        } catch (MalformedSerializedValue) {
-            $context->warn($post->id, sprintf('Custom field "%s" holds a malformed serialized value; it was kept as a string.', $key));
-
-            return $value;
-        }
     }
 }

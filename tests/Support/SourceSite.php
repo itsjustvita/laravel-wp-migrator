@@ -89,6 +89,46 @@ final class SourceSite
         ], $attributes));
     }
 
+    public function acfGroup(string $title = 'Fields'): int
+    {
+        return $this->post(['post_type' => 'acf-field-group', 'post_title' => $title, 'post_content' => serialize(['location' => []])]);
+    }
+
+    /**
+     * An ACF field definition below a field group or a parent field.
+     *
+     * @param  array<string, mixed>  $settings
+     */
+    public function acfField(int $parent, string $name, string $type, array $settings = [], ?string $key = null, int $order = 0): string
+    {
+        $key ??= 'field_'.substr(md5($parent.'/'.$name), 0, 13);
+
+        $this->post([
+            'post_type' => 'acf-field',
+            'post_title' => ucfirst($name),
+            'post_name' => $key,
+            'post_excerpt' => $name,
+            'post_parent' => $parent,
+            'menu_order' => $order,
+            'post_content' => serialize(['type' => $type, ...$settings]),
+        ]);
+
+        return $key;
+    }
+
+    public function acfFieldId(string $key): int
+    {
+        return (int) $this->table('posts')->where('post_type', 'acf-field')->where('post_name', $key)->value('ID');
+    }
+
+    /**
+     * A field value the way ACF stores it: the value and a reference to the field key.
+     */
+    public function acfValue(int $postId, string $name, string $key, string $value): self
+    {
+        return $this->postMeta($postId, $name, $value)->postMeta($postId, '_'.$name, $key);
+    }
+
     public function postMeta(int $postId, string $key, string $value): self
     {
         $this->table('postmeta')->insert(['post_id' => $postId, 'meta_key' => $key, 'meta_value' => $value]);

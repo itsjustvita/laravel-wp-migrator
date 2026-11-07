@@ -12,6 +12,7 @@ use ItsJustVita\WpMigrator\Import\ImportProgress;
 use ItsJustVita\WpMigrator\Import\SourceType;
 use ItsJustVita\WpMigrator\Models\ImportMapEntry;
 use ItsJustVita\WpMigrator\WpMigrator;
+use LogicException;
 use Throwable;
 
 /**
@@ -59,22 +60,81 @@ abstract class EntityImporter implements Importer
      */
     abstract protected function map(object $record, ImportContext $context): ?Model;
 
+    /**
+     * Whether rows with unresolved references are mapped once more at the end
+     * of the run, when the rows they refer to may have been imported.
+     */
+    protected function retriesIncompleteRows(): bool
+    {
+        return false;
+    }
+
+    /**
+     * The records with these source IDs, read again for the second pass.
+     *
+     * @param  list<int>  $ids
+     * @return iterable<list<TRecord>>
+     */
+    protected function reload(array $ids): iterable
+    {
+        throw new LogicException(static::class.' must implement reload() to retry incomplete rows.');
+    }
+
     public function run(ImportOptions $options, ImportContext $context, ImportProgress $progress): void
     {
-        $context->report->begin($this->name());
+        $report = $context->report;
+        $report->begin($this->name());
+        $retry = $this->retriesIncompleteRows();
+
+        /** @var array<int, 'created'|'updated'> $deferred */
+        $deferred = [];
 
         foreach ($this->batches($options) as $batch) {
             foreach ($batch as $record) {
-                $this->import($record, $options, $context);
+                $checkpoint = $retry ? $report->checkpoint() : null;
+                $outcome = $this->import($record, $options, $context);
+
+                if ($checkpoint !== null && $outcome !== null && $context->rowIncomplete()) {
+                    // Its findings are forgotten; the second pass reports what is still open.
+                    $report->rollbackTo($checkpoint);
+                    $deferred[$this->sourceId($record)] = $outcome;
+                } elseif ($outcome !== null) {
+                    $this->recordOutcome($outcome, $context);
+                }
+
                 $progress->advance();
+            }
+        }
+
+        if ($deferred === []) {
+            return;
+        }
+
+        foreach ($this->reload(array_keys($deferred)) as $batch) {
+            foreach ($batch as $record) {
+                if ($this->import($record, $options, $context) !== null) {
+                    $this->recordOutcome($deferred[$this->sourceId($record)], $context);
+                }
             }
         }
     }
 
     /**
-     * @param  TRecord  $record
+     * @param  'created'|'updated'  $outcome
      */
-    private function import(object $record, ImportOptions $options, ImportContext $context): void
+    private function recordOutcome(string $outcome, ImportContext $context): void
+    {
+        $outcome === 'created' ? $context->report->created($this->name()) : $context->report->updated($this->name());
+    }
+
+    /**
+     * Maps one record. Unchanged, skipped and failed records are reported
+     * here; for a written record the caller learns whether it was new.
+     *
+     * @param  TRecord  $record
+     * @return 'created'|'updated'|null
+     */
+    private function import(object $record, ImportOptions $options, ImportContext $context): ?string
     {
         $id = $this->sourceId($record);
 
@@ -89,7 +149,7 @@ abstract class EntityImporter implements Importer
             if (! $options->force && $entry !== null && $entry->checksum === $checksum) {
                 $context->report->unchanged($this->name());
 
-                return;
+                return null;
             }
 
             $context->startRow();
@@ -112,15 +172,15 @@ abstract class EntityImporter implements Importer
         } catch (Throwable $exception) {
             $context->report->failed($this->name(), $id, $exception);
 
-            return;
+            return null;
         }
 
         if ($model === null) {
             $context->report->skipped($this->name(), $id, sprintf('%s returned no model', class_basename($this->mapperClass($record))));
 
-            return;
+            return null;
         }
 
-        $entry === null ? $context->report->created($this->name()) : $context->report->updated($this->name());
+        return $entry === null ? 'created' : 'updated';
     }
 }

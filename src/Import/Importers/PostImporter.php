@@ -6,10 +6,12 @@ namespace ItsJustVita\WpMigrator\Import\Importers;
 
 use Illuminate\Database\Eloquent\Model;
 use ItsJustVita\WpMigrator\Content\ContentTransformer;
+use ItsJustVita\WpMigrator\Fields\FieldResolver;
 use ItsJustVita\WpMigrator\Import\ImportContext;
 use ItsJustVita\WpMigrator\Import\ImportMap;
 use ItsJustVita\WpMigrator\Import\ImportOptions;
 use ItsJustVita\WpMigrator\Import\SourceType;
+use ItsJustVita\WpMigrator\Seo\SeoImporter;
 use ItsJustVita\WpMigrator\Source\Dto\SourcePost;
 use ItsJustVita\WpMigrator\Source\Readers\PostReader;
 use ItsJustVita\WpMigrator\WpMigrator;
@@ -26,6 +28,8 @@ final class PostImporter extends EntityImporter
         ImportMap $map,
         private readonly PostReader $reader,
         private readonly ContentTransformer $content,
+        private readonly FieldResolver $fields,
+        private readonly SeoImporter $seo,
     ) {
         parent::__construct($mappers, $map);
     }
@@ -65,6 +69,18 @@ final class PostImporter extends EntityImporter
         return $record->toArray();
     }
 
+    protected function retriesIncompleteRows(): bool
+    {
+        return true;
+    }
+
+    protected function reload(array $ids): iterable
+    {
+        foreach (array_chunk($ids, 200) as $chunk) {
+            yield $this->reader->byIds($chunk);
+        }
+    }
+
     protected function mapperClass(object $record): string
     {
         return $this->mappers->postMapper($record->type)::class;
@@ -72,9 +88,18 @@ final class PostImporter extends EntityImporter
 
     protected function map(object $record, ImportContext $context): ?Model
     {
-        return $this->mappers->postMapper($record->type)->map(
-            $record->withBlocks($this->content->transform($record, $context)),
+        $model = $this->mappers->postMapper($record->type)->map(
+            $record->withTransformed(
+                $this->content->transform($record, $context),
+                $this->fields->resolve($record, $context),
+            ),
             $context,
         );
+
+        if ($model !== null) {
+            $this->seo->sync($model, $record, $context);
+        }
+
+        return $model;
     }
 }

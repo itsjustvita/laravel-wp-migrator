@@ -7,11 +7,15 @@ namespace ItsJustVita\WpMigrator;
 use Illuminate\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Hashing\HashManager;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
+use ItsJustVita\WpMigrator\Auth\WpHasher;
 use ItsJustVita\WpMigrator\Console\CheckCommand;
+use ItsJustVita\WpMigrator\Console\ExportRedirectsCommand;
 use ItsJustVita\WpMigrator\Console\ImportCommand;
+use ItsJustVita\WpMigrator\Console\PasswordStatsCommand;
 use ItsJustVita\WpMigrator\Content\Urls\DefaultUrlResolver;
 use ItsJustVita\WpMigrator\Content\Urls\UrlResolver;
 use ItsJustVita\WpMigrator\Models\Comment;
@@ -23,6 +27,7 @@ use ItsJustVita\WpMigrator\Models\Redirect;
 use ItsJustVita\WpMigrator\Models\SeoMeta;
 use ItsJustVita\WpMigrator\Models\Term;
 use ItsJustVita\WpMigrator\View\Components\Blocks;
+use ItsJustVita\WpMigrator\View\Components\Seo;
 
 class WpMigratorServiceProvider extends ServiceProvider
 {
@@ -31,6 +36,18 @@ class WpMigratorServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/wp-migrator.php', 'wp-migrator');
 
         $this->app->singleton(WpMigrator::class);
+
+        $this->callAfterResolving('hash', function (HashManager $hash, Application $app): void {
+            $hash->extend('wordpress', function () use ($hash, $app): WpHasher {
+                $inner = $app->make(Repository::class)->get('wp-migrator.passwords.driver', 'bcrypt');
+
+                if (! is_string($inner) || $inner === 'wordpress') {
+                    throw new InvalidArgumentException('wp-migrator.passwords.driver must name a regular hashing driver such as bcrypt or argon2id.');
+                }
+
+                return new WpHasher($hash->driver($inner), $app->make(Repository::class));
+            });
+        });
 
         $this->app->bind(UrlResolver::class, function (Application $app): UrlResolver {
             $resolver = $app->make(Repository::class)->get('wp-migrator.urls.resolver', DefaultUrlResolver::class);
@@ -48,6 +65,7 @@ class WpMigratorServiceProvider extends ServiceProvider
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'wp-migrator');
 
         Blade::component('wp-blocks', Blocks::class);
+        Blade::component('wp-seo', Seo::class);
 
         Relation::morphMap([
             'wp_migrator_post' => Post::class,
@@ -64,6 +82,8 @@ class WpMigratorServiceProvider extends ServiceProvider
             $this->commands([
                 CheckCommand::class,
                 ImportCommand::class,
+                PasswordStatsCommand::class,
+                ExportRedirectsCommand::class,
             ]);
 
             $this->publishes([

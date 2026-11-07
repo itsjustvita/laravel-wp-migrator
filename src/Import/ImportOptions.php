@@ -10,10 +10,10 @@ use ItsJustVita\WpMigrator\Source\Readers\PostFilter;
 final readonly class ImportOptions
 {
     /** Importer names that can be selected with "only". */
-    public const array AVAILABLE = ['users', 'media', 'terms', 'posts', 'pages'];
+    public const array AVAILABLE = ['users', 'media', 'terms', 'posts', 'pages', 'redirects'];
 
     /** Importer names from the documented set that do not exist yet. */
-    public const array PLANNED = ['menus', 'comments', 'redirects'];
+    public const array PLANNED = ['menus', 'comments'];
 
     /**
      * @param  list<string>|null  $only  importer names; null runs all of them. "posts" covers

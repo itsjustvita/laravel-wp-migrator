@@ -111,6 +111,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Passwords
+    |--------------------------------------------------------------------------
+    |
+    | Set HASH_DRIVER=wordpress to let imported users log in with their WP
+    | password. The "wordpress" driver verifies WP hashes and replaces each
+    | one with a hash of "driver" at the user's next login. Plain MD5 hashes
+    | from very old installations are only accepted when "allow_md5" is on.
+    |
+    */
+
+    'passwords' => [
+        'driver' => env('WP_MIGRATOR_PASSWORD_DRIVER', 'bcrypt'),
+        'allow_md5' => false,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Media
     |--------------------------------------------------------------------------
     |
@@ -164,11 +181,31 @@ return [
     */
 
     'fields' => [
+        // Convert ACF fields into typed values: media, posts, users and terms
+        // become the IDs of what they were imported as, repeaters and
+        // flexible content become lists, groups become nested objects.
+        'acf' => true,
+
         'allowed_internal_keys' => [],
 
         'excluded_keys' => [
             'rank_math_*',
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | SEO
+    |--------------------------------------------------------------------------
+    |
+    | The per-post settings of Yoast SEO and Rank Math go into seo_meta for
+    | whatever model a post was mapped onto. Render them with
+    | <x-wp-seo :model="$post" />.
+    |
+    */
+
+    'seo' => [
+        'enabled' => true,
     ],
 
     /*
@@ -195,6 +232,16 @@ return [
             'post' => '/blog/{slug}',
             '*' => '/{type}/{slug}',
         ],
+
+        // Where category, tag and author archives went, for their redirects.
+        // Tokens: {slug}, {path} (with parent categories), {taxonomy}, {id}.
+        // Set an entry to null to leave those archives without a redirect.
+        'term_patterns' => [
+            'category' => '/blog/category/{path}',
+            'post_tag' => '/blog/tag/{slug}',
+        ],
+
+        'author_pattern' => '/blog/author/{slug}',
 
         'old_hosts' => [],
 

@@ -152,6 +152,41 @@ final class ImportReport
         $this->notes[] = $note;
     }
 
+    /**
+     * The current extent of everything a row can add, to undo it later.
+     *
+     * @return array{lists: array<string, int>, unknownShortcodes: array<string, array{count: int, post_ids: list<int>}>, unknownBlocks: array<string, array{count: int, post_ids: list<int>}>}
+     */
+    public function checkpoint(): array
+    {
+        return [
+            'lists' => [
+                'warnings' => count($this->warnings),
+                'unresolved' => count($this->unresolved),
+                'skipped' => count($this->skipped),
+                'errors' => count($this->errors),
+            ],
+            'unknownShortcodes' => $this->unknownShortcodes,
+            'unknownBlocks' => $this->unknownBlocks,
+        ];
+    }
+
+    /**
+     * Forgets what was added since the checkpoint, such as the findings of a
+     * row that is going to be mapped once more.
+     *
+     * @param  array{lists: array<string, int>, unknownShortcodes: array<string, array{count: int, post_ids: list<int>}>, unknownBlocks: array<string, array{count: int, post_ids: list<int>}>}  $checkpoint
+     */
+    public function rollbackTo(array $checkpoint): void
+    {
+        $this->warnings = array_slice($this->warnings, 0, $checkpoint['lists']['warnings']);
+        $this->unresolved = array_slice($this->unresolved, 0, $checkpoint['lists']['unresolved']);
+        $this->skipped = array_slice($this->skipped, 0, $checkpoint['lists']['skipped']);
+        $this->errors = array_slice($this->errors, 0, $checkpoint['lists']['errors']);
+        $this->unknownShortcodes = $checkpoint['unknownShortcodes'];
+        $this->unknownBlocks = $checkpoint['unknownBlocks'];
+    }
+
     public function finish(): void
     {
         $this->finishedAt = CarbonImmutable::now();

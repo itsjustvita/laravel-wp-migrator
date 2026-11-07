@@ -52,15 +52,17 @@ php artisan wp:import --type=event --since=2026-10-01
 
 | Option | Effect |
 | --- | --- |
-| `--only` | Comma-separated importers: `users`, `media`, `terms`, `posts`, `pages`. `posts` covers every post type except pages. |
+| `--only` | Comma-separated importers: `users`, `media`, `terms`, `posts`, `pages`, `redirects`. `posts` covers every post type except pages. |
 | `--type` | Comma-separated post types to import. |
 | `--since` | Only posts and media modified on or after this date. |
 | `--dry-run` | Rolls every change back at the end and copies no files. |
 | `--force` | Maps rows again even when they are unchanged, for example after changing the configuration. |
 
-Imports are idempotent. Unchanged rows are skipped, changed rows are updated, and an aborted run can simply be started again. Rows with references that could not be resolved are mapped again on the next run. Every run writes a report to `storage/logs/wp-migrator-<timestamp>.md`.
+Imports are idempotent. Unchanged rows are skipped, changed rows are updated, and an aborted run can simply be started again. A post that refers to a post imported later in the same run is mapped once more at the end of the run. Whatever still cannot be resolved is mapped again on the next run. Every run writes a report to `storage/logs/wp-migrator-<timestamp>.md`.
 
-Menus, comments and redirects are not available yet.
+Menus and comments are not available yet.
+
+Media files are only copied when their extension is listed in `media.allowed_extensions`. Files a web server could execute, such as `.php`, are never copied, also not behind a second extension like `shell.php.jpg`: hacked sites often hide a backdoor in their uploads. SVG and HTML files can run script in the browser and are left out by default.
 
 ### Content
 
@@ -123,9 +125,83 @@ Embeds make no network requests. YouTube and Vimeo get a player built from the U
 
 After changing a handler, the URL patterns or other configuration, run `wp:import --force` to map unchanged rows again.
 
-### Users
+### Custom fields
+
+Post meta ends up in `posts.fields`. Keys starting with an underscore are internal and skipped unless you allow them in `fields.allowed_internal_keys`.
+
+ACF fields are converted to typed values, using the field definitions stored in the source database:
+
+| ACF type | Stored as |
+| --- | --- |
+| true/false, number, range | boolean, integer or float |
+| date picker, date time picker | `2026-01-15`, or ISO 8601 with the site's timezone |
+| image, file, gallery | IDs of the imported media |
+| post object, relationship, page link | IDs of what those posts were imported as |
+| user, taxonomy | IDs of the imported users and terms |
+| repeater | list of rows |
+| flexible content | list of rows, each with a `layout` key |
+| group | nested object |
+| wysiwyg | HTML with paragraphs, rendered shortcodes and rewritten links |
+| url, link | with links to the old site rewritten |
+
+Fields without a definition in the database, such as field groups registered only in PHP or local JSON, are copied as they are.
+
+### SEO
+
+The per-post settings of Yoast SEO and Rank Math go into `seo_meta`: title, description, canonical URL, robots and the Open Graph fields. Template variables such as `%%title%%`, `%%sep%%`, `%%sitename%%` and `%%excerpt%%`, or their Rank Math equivalents, are resolved during the import. Variables that cannot be resolved are left out and listed in the report. Posts without their own SEO title get none; the site-wide default templates of the plugins are not applied.
+
+Render the tags in your layout:
+
+```blade
+<head>
+    <x-wp-seo :model="$post" />
+</head>
+```
+
+The title falls back to the model's `title`. SEO settings attach to whatever model a post was mapped onto. Add the `ItsJustVita\WpMigrator\Models\Concerns\HasSeoMeta` trait to your own models to eager load them with `->with('seo')`.
+
+### Users and passwords
 
 Users go into your application's user model. Original password hashes are stored unchanged. A user whose email address already exists in your application is linked to that record, and the import never changes it. Roles and attributes are mapped in the `users` section of the configuration.
+
+To let imported users log in with their old password, switch Laravel to the `wordpress` hashing driver:
+
+```dotenv
+HASH_DRIVER=wordpress
+```
+
+It verifies phpass hashes from WP before 6.8 and the prefixed bcrypt hashes from WP 6.8 and later. Plain MD5 hashes from very old installations are only accepted with `passwords.allow_md5`. Like the WP login, it ignores spaces around the password. Everything else, including every new hash, is handled by the driver in `passwords.driver`, bcrypt by default.
+
+Laravel's login replaces a WP hash with a regular one at the first successful login, as long as `hashing.rehash_on_login` is on, which is the default. This works with `Auth::attempt()`, the starter kits and Fortify. If you authenticate users yourself, for example with `Fortify::authenticateUsing()`, check the password with `Hash::check()` and rehash it when `Hash::needsRehash()` says so.
+
+See how many users still have a WP hash:
+
+```bash
+php artisan wp:password-stats
+```
+
+### Redirects
+
+The `redirects` importer runs last. It works out the URLs of the old site from its permalink settings: posts, pages with their hierarchy, custom post types, category, tag and author archives, attachment pages, and query URLs such as `/?p=123`. Each one gets a redirect to its new URL from the URL resolver, unless the URL stays the same. Attachment pages redirect to the file. Set the archive patterns in `urls.term_patterns` and `urls.author_pattern`, or set them to `null` to leave those archives out.
+
+Register the middleware globally, so it also sees requests no route matches. It answers a 404 for an old path with its redirect and counts the hit:
+
+```php
+// bootstrap/app.php
+use ItsJustVita\WpMigrator\Http\Middleware\RedirectMissingPages;
+
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->append(RedirectMissingPages::class);
+})
+```
+
+For many redirects, or to keep them out of PHP, export them for the web server:
+
+```bash
+php artisan wp:redirects:export --format=nginx --output=redirects.conf
+php artisan wp:redirects:export --format=apache
+php artisan wp:redirects:export --format=csv
+```
 
 ### Custom mappers
 

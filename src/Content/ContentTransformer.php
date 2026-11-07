@@ -115,10 +115,20 @@ class ContentTransformer
      */
     private function transformClassic(string $content, int $postId, ImportContext $context): array
     {
-        $html = $this->urls->rewrite($content, $postId, $context);
-        $html = $this->autop->format($this->renderShortcodes($html, $postId, $context));
+        $html = $this->formatHtml($content, $postId, $context);
 
         return $html === '' ? [] : [Block::freeform($html)];
+    }
+
+    /**
+     * Classic editor HTML as it would be shown: links rewritten, shortcodes
+     * rendered and paragraphs added. Also used for rich text fields.
+     */
+    public function formatHtml(string $html, int $postId, ImportContext $context): string
+    {
+        $html = $this->urls->rewrite($html, $postId, $context);
+
+        return $this->autop->format($this->renderShortcodes($html, $postId, $context));
     }
 
     /**

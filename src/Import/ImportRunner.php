@@ -18,10 +18,13 @@ use ItsJustVita\WpMigrator\Import\Importers\UserImporter;
 use ItsJustVita\WpMigrator\Models\ImportMapEntry;
 use ItsJustVita\WpMigrator\Models\Media;
 use ItsJustVita\WpMigrator\Models\Post;
+use ItsJustVita\WpMigrator\Models\Redirect;
 use ItsJustVita\WpMigrator\Models\Term;
+use ItsJustVita\WpMigrator\Redirects\RedirectImporter;
 
 /**
- * Runs the importers in dependency order: users, media, terms, posts.
+ * Runs the importers in dependency order: users, media, terms, posts and
+ * finally the redirects, which point to what the others imported.
  */
 class ImportRunner
 {
@@ -31,6 +34,7 @@ class ImportRunner
         MediaImporter::class,
         TermImporter::class,
         PostImporter::class,
+        RedirectImporter::class,
     ];
 
     public function __construct(
@@ -86,7 +90,7 @@ class ImportRunner
      */
     private function beginDryRun(): array
     {
-        $models = [ImportMapEntry::class, Post::class, Media::class, Term::class];
+        $models = [ImportMapEntry::class, Post::class, Media::class, Term::class, Redirect::class];
         $userModel = $this->config->get('wp-migrator.users.model') ?? $this->config->get('auth.providers.users.model');
 
         if (is_string($userModel) && is_subclass_of($userModel, Model::class)) {

@@ -14,6 +14,7 @@ final readonly class SourcePost
      *                                             future posts, or the last save for drafts
      * @param  list<SourceTerm>  $terms
      * @param  list<Block>|null  $blocks  the transformed content; null when it was not transformed
+     * @param  array<string, mixed>|null  $fields  the resolved custom fields; null when they were not resolved
      */
     public function __construct(
         public int $id,
@@ -33,17 +34,19 @@ final readonly class SourcePost
         public MetaBag $meta,
         public array $terms = [],
         public ?array $blocks = null,
+        public ?array $fields = null,
     ) {}
 
     /**
      * @param  list<Block>  $blocks
+     * @param  array<string, mixed>  $fields
      */
-    public function withBlocks(array $blocks): self
+    public function withTransformed(array $blocks, array $fields): self
     {
         return new self(
             $this->id, $this->type, $this->status, $this->title, $this->slug, $this->content, $this->excerpt,
             $this->authorId, $this->parentId, $this->menuOrder, $this->mimeType, $this->guid,
-            $this->publishedAt, $this->modifiedAt, $this->meta, $this->terms, $blocks,
+            $this->publishedAt, $this->modifiedAt, $this->meta, $this->terms, $blocks, $fields,
         );
     }
 

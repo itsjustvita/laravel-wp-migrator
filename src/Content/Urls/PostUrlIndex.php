@@ -27,6 +27,9 @@ class PostUrlIndex
     /** @var array<string, int> */
     private array $byPath = [];
 
+    /** @var array<int, string> */
+    private array $paths = [];
+
     /** @var array<string, list<int>> */
     private array $bySlug = [];
 
@@ -63,6 +66,29 @@ class PostUrlIndex
         $candidates = $this->bySlug[$segments[array_key_last($segments)]] ?? [];
 
         return count($candidates) === 1 ? $this->byId[$candidates[0]] : null;
+    }
+
+    /**
+     * Every content post of the source site.
+     *
+     * @return list<PostReference>
+     */
+    public function all(): array
+    {
+        $this->load();
+
+        return array_values($this->byId);
+    }
+
+    /**
+     * The path the post had under the current permalink structure, as
+     * written by WP: "/2026/hello". Null with plain permalinks.
+     */
+    public function oldPath(int $id): ?string
+    {
+        $this->load();
+
+        return $this->paths[$id] ?? null;
     }
 
     public function findById(int $id): ?PostReference
@@ -129,6 +155,7 @@ class PostUrlIndex
 
             if ($path !== null) {
                 $this->byPath[$this->normalise($path)] = $id;
+                $this->paths[$id] = $path;
             }
         }
     }

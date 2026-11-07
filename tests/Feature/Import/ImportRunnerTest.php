@@ -19,6 +19,7 @@ use ItsJustVita\WpMigrator\Mapping\UserMapper;
 use ItsJustVita\WpMigrator\Models\ImportMapEntry;
 use ItsJustVita\WpMigrator\Models\Media;
 use ItsJustVita\WpMigrator\Models\Post;
+use ItsJustVita\WpMigrator\Models\SeoMeta;
 use ItsJustVita\WpMigrator\Models\Term;
 use ItsJustVita\WpMigrator\Source\Dto\SourcePost;
 use ItsJustVita\WpMigrator\Source\Dto\SourceUser;
@@ -125,12 +126,14 @@ it('imports users, media, terms and posts in dependency order', function () {
 
     $report = runImport();
 
-    expect($report->counts())->toBe([
-        'users' => ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],
-        'media' => ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],
-        'terms' => ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],
-        'posts' => ['created' => 3, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],
-    ])
+    expect(array_keys($report->counts()))->toBe(['users', 'media', 'terms', 'posts', 'redirects'])
+        ->and($report->counts())->toMatchArray([
+            'users' => ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],
+            'media' => ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],
+            'terms' => ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],
+            'posts' => ['created' => 3, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],
+        ])
+        ->and($report->counts()['redirects']['created'])->toBeGreaterThan(0)
         ->and($report->unresolvedReferences())->toBe([])
         ->and($report->errors())->toBe([]);
 
@@ -155,7 +158,7 @@ it('skips unchanged rows on a second run', function () {
     $report = runImport();
 
     expect(array_map(fn (array $counts) => $counts['unchanged'], $report->counts()))
-        ->toBe(['users' => 1, 'media' => 1, 'terms' => 1, 'posts' => 3])
+        ->toMatchArray(['users' => 1, 'media' => 1, 'terms' => 1, 'posts' => 3])
         ->and(array_sum(array_map(fn (array $counts) => $counts['created'] + $counts['updated'], $report->counts())))->toBe(0)
         ->and(Post::count())->toBe(3)
         ->and(Media::count())->toBe(1)
@@ -506,4 +509,61 @@ it('stores multibyte text, emoji and quotes in the json column', function () {
     expect($report->errors())->toBe([])
         ->and($block['innerHTML'])->toBe($html)
         ->and($block['attrs']['note'])->toBe('Grüße 👋');
+});
+
+it('resolves references to posts imported later in the same run', function () {
+    $site = $this->source();
+    $group = $site->acfGroup();
+    $key = $site->acfField($group, 'related', 'relationship');
+    $first = $site->post(['post_title' => 'First', 'post_author' => 0]);
+    $second = $site->post(['post_title' => 'Second', 'post_author' => 0]);
+    $site->acfValue($first, 'related', $key, serialize([(string) $second]));
+    $site->acfValue($second, 'related', $key, serialize([(string) $first]));
+
+    $report = runImport(new ImportOptions(only: ['posts']));
+    $again = runImport(new ImportOptions(only: ['posts']));
+
+    $firstPost = Post::query()->where('title', 'First')->sole();
+    $secondPost = Post::query()->where('title', 'Second')->sole();
+
+    expect($report->counts()['posts'])->toMatchArray(['created' => 2, 'updated' => 0])
+        ->and($report->unresolvedReferences())->toBe([])
+        ->and($firstPost->fields)->toBe(['related' => [$secondPost->id]])
+        ->and($secondPost->fields)->toBe(['related' => [$firstPost->id]])
+        ->and($again->counts()['posts'])->toMatchArray(['unchanged' => 2, 'updated' => 0]);
+});
+
+it('reports a reference once when it stays unresolved after the second pass', function () {
+    $site = $this->source();
+    $key = $site->acfField($site->acfGroup(), 'related', 'relationship');
+    $post = $site->post(['post_title' => 'Lonely', 'post_author' => 0]);
+    $site->acfValue($post, 'related', $key, serialize(['999']));
+    $site->postMeta($post, 'broken', 'a:1:{x');
+
+    $report = runImport(new ImportOptions(only: ['posts']));
+
+    expect($report->counts()['posts'])->toMatchArray(['created' => 1, 'updated' => 0])
+        ->and($report->unresolvedReferences())->toHaveCount(1)
+        ->and($report->warnings())->toHaveCount(1);
+});
+
+it('stores the seo settings for the model a post was mapped onto', function () {
+    Schema::create('events', function ($table) {
+        $table->id();
+        $table->string('title');
+        $table->string('starts_at')->nullable();
+        $table->timestamps();
+    });
+    WpMigrator::mapPostType('event', EventPostMapper::class);
+    $site = $this->source();
+    $site->option('blogname', 'Acme');
+    $post = $site->post(['post_title' => 'News', 'post_author' => 0]);
+    $site->postMeta($post, '_yoast_wpseo_title', '%%title%% %%sep%% %%sitename%%');
+    $event = $site->post(['post_title' => 'Gig', 'post_type' => 'event', 'post_author' => 0]);
+    $site->postMeta($event, 'rank_math_description', 'Live music');
+
+    runImport(new ImportOptions(only: ['posts']));
+
+    expect(Post::query()->sole()->seo?->title)->toBe('News - Acme')
+        ->and(SeoMeta::query()->whereMorphedTo('seoable', Event::query()->sole())->value('description'))->toBe('Live music');
 });
