@@ -1,0 +1,77 @@
+{
+    "name": "itsjustvita/laravel-wp-migrator",
+    "description": "Migrate a WP site's content into a clean Laravel application: posts, media, terms, menus, users, SEO meta and redirects, with block parsing and a theme inventory.",
+    "keywords": [
+        "laravel",
+        "wp",
+        "migration",
+        "import",
+        "gutenberg",
+        "blocks"
+    ],
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Vitalis Feist"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "guzzlehttp/guzzle": "^7.8.2 || ^8.0",
+        "illuminate/config": "^12.0 || ^13.0",
+        "illuminate/console": "^12.0 || ^13.0",
+        "illuminate/contracts": "^12.0 || ^13.0",
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/filesystem": "^12.0 || ^13.0",
+        "illuminate/http": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0",
+        "illuminate/view": "^12.0 || ^13.0",
+        "nesbot/carbon": "^3.8.4"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.21",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-laravel": "^4.0",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan-deprecation-rules": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "ItsJustVita\\WpMigrator\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ItsJustVita\\WpMigrator\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "analyse": "vendor/bin/phpstan analyse --memory-limit=1G",
+        "format": "vendor/bin/pint",
+        "lint": "vendor/bin/pint --test",
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "ItsJustVita\\WpMigrator\\WpMigratorServiceProvider"
+            ],
+            "aliases": {
+                "WpMigrator": "ItsJustVita\\WpMigrator\\Facades\\WpMigrator"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  style:
+    name: Code style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Pint
+        run: vendor/bin/pint --test
+
+  analyse:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G --error-format=github
+
+  tests:
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+        laravel: ['12.*', '13.*']
+        include:
+          - laravel: '12.*'
+            testbench: '10.*'
+          - laravel: '13.*'
+            testbench: '11.*'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, intl, pdo, pdo_sqlite, sqlite3
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require --dev "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+          composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Pest
+        run: vendor/bin/pest --ci
+
+  # SQLite accepts queries that real databases refuse, so the suite also runs
+  # on both servers. It takes minutes there, so once each is enough.
+  database:
+    name: ${{ matrix.db.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        db:
+          - name: mysql
+            image: mysql:8.4
+            health: mysqladmin ping -h 127.0.0.1 -uroot -proot
+          - name: mariadb
+            image: mariadb:11.4
+            health: healthcheck.sh --connect --innodb_initialized
+
+    services:
+      db:
+        image: ${{ matrix.db.image }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="${{ matrix.db.health }}"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      WP_MIGRATOR_TEST_DB_DRIVER: ${{ matrix.db.name }}
+      WP_MIGRATOR_TEST_DB_HOST: 127.0.0.1
+      WP_MIGRATOR_TEST_DB_PORT: 3306
+      WP_MIGRATOR_TEST_DB_DATABASE: wordpress
+      WP_MIGRATOR_TEST_DB_USERNAME: root
+      WP_MIGRATOR_TEST_DB_PASSWORD: root
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, pdo, pdo_mysql, pdo_sqlite, sqlite3
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Pest
+        run: vendor/bin/pest --ci

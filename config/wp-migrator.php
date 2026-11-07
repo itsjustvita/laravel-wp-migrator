@@ -1,0 +1,190 @@
+<?php
+
+declare(strict_types=1);
+use ItsJustVita\WpMigrator\Content\Urls\DefaultUrlResolver;
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Source
+    |--------------------------------------------------------------------------
+    |
+    | The WP site is read through an additional database connection that you
+    | define in config/database.php. The package never writes to it. Uploads
+    | are read from a local copy of wp-content/uploads; when a file is missing
+    | there, it is downloaded from the old site URL instead.
+    |
+    */
+
+    'source' => [
+        'connection' => env('WP_MIGRATOR_CONNECTION', 'wordpress'),
+        'table_prefix' => env('WP_MIGRATOR_TABLE_PREFIX', 'wp_'),
+        'uploads_path' => env('WP_MIGRATOR_UPLOADS_PATH'),
+        'site_url' => env('WP_MIGRATOR_SITE_URL'),
+
+        // Public URL of wp-content/uploads on the old site. Derived from the
+        // site URL when empty.
+        'uploads_url' => env('WP_MIGRATOR_UPLOADS_URL'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Target
+    |--------------------------------------------------------------------------
+    |
+    | All tables created by the package migrations carry this prefix so they
+    | can live next to the tables of an existing application.
+    |
+    */
+
+    'target' => [
+        'table_prefix' => env('WP_MIGRATOR_TARGET_TABLE_PREFIX', ''),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Import
+    |--------------------------------------------------------------------------
+    |
+    | Which posts are considered content. Attachments become media and menu
+    | items become menus through their own importers; the other excluded
+    | types are internal to WP or to plugins and carry no site content.
+    |
+    */
+
+    'import' => [
+        'chunk_size' => 200,
+
+        'post_statuses' => ['publish', 'future', 'draft', 'pending', 'private'],
+
+        'excluded_post_types' => [
+            'attachment', 'revision', 'nav_menu_item',
+            'custom_css', 'customize_changeset', 'oembed_cache', 'user_request',
+            'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation',
+            'wp_font_family', 'wp_font_face',
+            'acf-field-group', 'acf-field', 'acf-post-type', 'acf-taxonomy', 'acf-ui-options-page',
+            'scheduled-action',
+        ],
+
+        'excluded_taxonomies' => [
+            'nav_menu', 'link_category', 'wp_theme', 'wp_template_part_area', 'wp_pattern_category',
+            'post_translations', 'term_translations', 'term_language',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Users
+    |--------------------------------------------------------------------------
+    |
+    | Users are written into the application's user model. "attributes" maps
+    | model attributes to source fields: login, email, display_name, nicename,
+    | url, password_hash, registered_at or meta:<key>. Password hashes are
+    | stored unchanged. Set "role_attribute" to store the first WP role,
+    | translated through "roles" (unlisted roles are stored as they are).
+    |
+    */
+
+    'users' => [
+        'model' => null, // defaults to auth.providers.users.model
+
+        'attributes' => [
+            'name' => 'display_name',
+            'email' => 'email',
+            'password' => 'password_hash',
+            'created_at' => 'registered_at',
+        ],
+
+        'role_attribute' => null,
+
+        'roles' => [
+            // 'administrator' => 'admin',
+            // 'subscriber' => 'member',
+        ],
+
+        // Link WP users to existing application users with the same email
+        // address instead of creating a second account. Linked users are
+        // never changed by the import.
+        'link_existing_by_email' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Media
+    |--------------------------------------------------------------------------
+    |
+    | Attachments are copied onto this disk below "directory", keeping the
+    | year/month layout of wp-content/uploads.
+    |
+    */
+
+    'media' => [
+        'disk' => env('WP_MIGRATOR_MEDIA_DISK', 'public'),
+        'directory' => 'wp-uploads',
+        'download_missing' => true,
+        'download_timeout' => 30,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Custom fields
+    |--------------------------------------------------------------------------
+    |
+    | Post meta is copied into posts.fields. Keys starting with "_" are
+    | internal and skipped unless they match "allowed_internal_keys"; keys
+    | matching "excluded_keys" are always skipped. Both accept * wildcards.
+    |
+    */
+
+    'fields' => [
+        'allowed_internal_keys' => [],
+
+        'excluded_keys' => [
+            'rank_math_*',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | URLs
+    |--------------------------------------------------------------------------
+    |
+    | Links to the old site inside content are rewritten. Upload URLs point to
+    | the new media files, post links to the URL the resolver returns. The
+    | default resolver fills these patterns, chosen by post type with "*" as
+    | the fallback. Tokens: {slug}, {path}, {type}, {id}, {year}, {month}, {day}.
+    |
+    | "old_hosts" lists further hosts that count as the old site. The rewrite
+    | slugs of custom post types are read from the source where possible; set
+    | them in "post_type_slugs" where that fails.
+    |
+    */
+
+    'urls' => [
+        'resolver' => DefaultUrlResolver::class,
+
+        'patterns' => [
+            'page' => '/{path}',
+            'post' => '/blog/{slug}',
+            '*' => '/{type}/{slug}',
+        ],
+
+        'old_hosts' => [],
+
+        'post_type_slugs' => [
+            // 'event' => 'veranstaltungen',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Report
+    |--------------------------------------------------------------------------
+    */
+
+    'report' => [
+        'directory' => storage_path('logs'),
+    ],
+
+];

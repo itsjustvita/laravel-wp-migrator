@@ -1,0 +1,1 @@
+{!! \ItsJustVita\WpMigrator\Content\Embeds::forBlock($block, $content) !!}

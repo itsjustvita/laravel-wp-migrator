@@ -1,0 +1,11 @@
+parameters:
+    level: 8
+    paths:
+        - config
+        - database
+        - src
+    tmpDir: build/phpstan
+    configDirectories:
+        - config
+    checkOctaneCompatibility: true
+    checkModelProperties: true
