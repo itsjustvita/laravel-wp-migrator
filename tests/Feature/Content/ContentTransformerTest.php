@@ -16,6 +16,7 @@ use ItsJustVita\WpMigrator\Import\SourceType;
 use ItsJustVita\WpMigrator\Models\Media;
 use ItsJustVita\WpMigrator\Source\Dto\MetaBag;
 use ItsJustVita\WpMigrator\Source\Dto\SourcePost;
+use ItsJustVita\WpMigrator\Support\JsonDepth;
 
 final class BoxHandler implements ShortcodeHandler
 {
@@ -365,4 +366,28 @@ it('produces stored blocks that survive json encoding', function () {
     $stored = json_decode(json_encode(array_map(fn (Block $b) => $b->toArray(), $blocks)), true);
 
     expect(Block::fromArray($stored[0])->innerBlocks[0]->name)->toBe('core/spacer');
+});
+
+it('keeps the stored tree within the json depth the database accepts', function () {
+    $import = importContext('posts');
+    $content = str_repeat('<!-- wp:group {"style":{"spacing":{"padding":{"top":"1px"}}}} --><div>', 30)
+        .'<!-- wp:paragraph --><p>Core</p><!-- /wp:paragraph -->'
+        .str_repeat('</div><!-- /wp:group -->', 30);
+
+    $blocks = transformContent($content, $import);
+    $json = json_encode(array_map(fn (Block $b) => $b->toArray(), $blocks));
+
+    expect(JsonDepth::of(json_decode($json, true)))->toBeLessThanOrEqual(31)
+        ->and($json)->toContain('Core')
+        ->and($import->report->warnings()[0]['message'])->toContain('nested too deeply');
+});
+
+it('uses the configured json depth', function () {
+    config()->set('wp-migrator.content.max_json_depth', 99);
+    $content = str_repeat('<!-- wp:group --><div>', 20).'x'.str_repeat('</div><!-- /wp:group -->', 20);
+    $import = importContext('posts');
+
+    transformContent($content, $import);
+
+    expect($import->report->warnings())->toBe([]);
 });

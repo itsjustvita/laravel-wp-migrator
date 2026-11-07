@@ -45,11 +45,20 @@ final class Autop
 
     private const string BLANK_LINE = '/\n[ \t]*\n(?:[ \t]*\n)*/';
 
-    /** @var list<array{type: 'text'|'open'|'close'|'void'|'verbatim'|'comment', raw: string, name: string, block: bool}> */
+    /** @var list<AutopToken> */
     private array $tokens = [];
 
     /** @var array<int, int> index of an opening tag => index of its closing tag */
     private array $closers = [];
+
+    /**
+     * Closing sequences known to be missing from the rest of the text. Without
+     * this, every unclosed comment or <pre> would search the whole remaining
+     * text again.
+     *
+     * @var array<string, true>
+     */
+    private array $unclosed = [];
 
     public function format(string $html): string
     {
@@ -59,6 +68,8 @@ final class Autop
             return '';
         }
 
+        $this->unclosed = [];
+
         $this->tokens = $this->tokenize($html);
         $this->closers = $this->matchBlocks();
 
@@ -66,7 +77,7 @@ final class Autop
     }
 
     /**
-     * @return list<array{type: 'text'|'open'|'close'|'void'|'verbatim'|'comment', raw: string, name: string, block: bool}>
+     * @return list<AutopToken>
      */
     private function tokenize(string $html): array
     {
@@ -85,29 +96,32 @@ final class Autop
             }
 
             if ($start > $textStart) {
-                $tokens[] = ['type' => 'text', 'raw' => substr($html, $textStart, $start - $textStart), 'name' => '', 'block' => false];
+                $tokens[] = new AutopToken('text', substr($html, $textStart, $start - $textStart));
             }
 
             $tokens[] = $token;
-            $offset = $textStart = $start + strlen($token['raw']);
+            $offset = $textStart = $start + strlen($token->raw);
         }
 
         if ($textStart < $length) {
-            $tokens[] = ['type' => 'text', 'raw' => substr($html, $textStart), 'name' => '', 'block' => false];
+            $tokens[] = new AutopToken('text', substr($html, $textStart));
         }
 
         return $tokens;
     }
 
-    /**
-     * @return array{type: 'open'|'close'|'void'|'verbatim'|'comment', raw: string, name: string, block: bool}|null
-     */
-    private function tokenAt(string $html, int $start): ?array
+    private function tokenAt(string $html, int $start): ?AutopToken
     {
         if (substr($html, $start, 4) === '<!--') {
-            $end = strpos($html, '-->', $start + 4);
+            $end = isset($this->unclosed['-->']) ? false : strpos($html, '-->', $start + 4);
 
-            return $end === false ? null : ['type' => 'comment', 'raw' => substr($html, $start, $end + 3 - $start), 'name' => '', 'block' => false];
+            if ($end === false) {
+                $this->unclosed['-->'] = true;
+
+                return null;
+            }
+
+            return new AutopToken('comment', substr($html, $start, $end + 3 - $start));
         }
 
         if (preg_match(self::TAG, $html, $matches, 0, $start) !== 1) {
@@ -119,23 +133,27 @@ final class Autop
         $block = $this->isBlock($name);
 
         if ($matches[1] === '/') {
-            return ['type' => 'close', 'raw' => $raw, 'name' => $name, 'block' => $block];
+            return new AutopToken('close', $raw, $name, $block);
         }
 
         if (in_array($name, self::VERBATIM_BLOCK, true) || in_array($name, self::VERBATIM_INLINE, true)) {
-            $close = stripos($html, '</'.$name, $start + strlen($raw));
+            $close = isset($this->unclosed[$name]) ? false : stripos($html, '</'.$name, $start + strlen($raw));
             $end = $close === false ? false : strpos($html, '>', $close);
 
+            if ($end === false) {
+                $this->unclosed[$name] = true;
+            }
+
             return $end === false
-                ? ['type' => 'void', 'raw' => $raw, 'name' => $name, 'block' => $block]
-                : ['type' => 'verbatim', 'raw' => substr($html, $start, $end + 1 - $start), 'name' => $name, 'block' => $block];
+                ? new AutopToken('void', $raw, $name, $block)
+                : new AutopToken('verbatim', substr($html, $start, $end + 1 - $start), $name, $block);
         }
 
         if (str_ends_with($raw, '/>') || in_array($name, self::VOID_BLOCK, true) || in_array($name, self::VOID_INLINE, true)) {
-            return ['type' => 'void', 'raw' => $raw, 'name' => $name, 'block' => $block];
+            return new AutopToken('void', $raw, $name, $block);
         }
 
-        return ['type' => 'open', 'raw' => $raw, 'name' => $name, 'block' => $block];
+        return new AutopToken('open', $raw, $name, $block);
     }
 
     private function isBlock(string $name): bool
@@ -157,14 +175,14 @@ final class Autop
         $closers = [];
 
         foreach ($this->tokens as $index => $token) {
-            if (! $token['block']) {
+            if (! $token->block) {
                 continue;
             }
 
-            if ($token['type'] === 'open') {
-                $stacks[$token['name']][] = $index;
-            } elseif ($token['type'] === 'close' && ($stacks[$token['name']] ?? []) !== []) {
-                $closers[(int) array_pop($stacks[$token['name']])] = $index;
+            if ($token->type === 'open') {
+                $stacks[$token->name][] = $index;
+            } elseif ($token->type === 'close' && ($stacks[$token->name] ?? []) !== []) {
+                $closers[(int) array_pop($stacks[$token->name])] = $index;
             }
         }
 
@@ -186,7 +204,7 @@ final class Autop
         while ($i < $to) {
             $token = $this->tokens[$i];
 
-            if (! $token['block']) {
+            if (! $token->block) {
                 $i++;
 
                 continue;
@@ -196,11 +214,11 @@ final class Autop
 
             $close = $this->closers[$i] ?? null;
 
-            if ($token['type'] === 'open' && $close !== null && $close < $to) {
+            if ($token->type === 'open' && $close !== null && $close < $to) {
                 $parts[] = $this->formatElement($i, $close, $depth);
                 $i = $close + 1;
             } else {
-                $parts[] = $token['raw'];
+                $parts[] = $token->raw;
                 $i++;
             }
 
@@ -214,9 +232,9 @@ final class Autop
 
     private function formatElement(int $open, int $close, int $depth): string
     {
-        $tag = $this->tokens[$open]['raw'];
-        $end = $this->tokens[$close]['raw'];
-        $name = $this->tokens[$open]['name'];
+        $tag = $this->tokens[$open]->raw;
+        $end = $this->tokens[$close]->raw;
+        $name = $this->tokens[$open]->name;
         $original = $tag.$this->rawBetween($open + 1, $close).$end;
 
         if ($depth >= self::MAX_DEPTH) {
@@ -291,11 +309,11 @@ final class Autop
             $token = $this->tokens[$i];
             $childClose = $this->closers[$i] ?? null;
 
-            if ($token['block'] && $token['type'] === 'open' && $childClose !== null && $childClose < $close) {
+            if ($token->block && $token->type === 'open' && $childClose !== null && $childClose < $close) {
                 $inner .= $this->formatElement($i, $childClose, $depth + 1);
                 $i = $childClose + 1;
             } else {
-                $inner .= $token['raw'];
+                $inner .= $token->raw;
                 $i++;
             }
         }
@@ -335,22 +353,22 @@ final class Autop
         for ($i = $from; $i < $to; $i++) {
             $token = $this->tokens[$i];
 
-            if ($token['type'] !== 'text') {
-                if (! $token['block']) {
-                    $inlineDepth += match ($token['type']) {
+            if ($token->type !== 'text') {
+                if (! $token->block) {
+                    $inlineDepth += match ($token->type) {
                         'open' => 1,
                         'close' => $inlineDepth > 0 ? -1 : 0,
                         default => 0,
                     };
                 }
 
-                $current = $this->flushBreak($current, $pendingBreak).$token['raw'];
+                $current = $this->flushBreak($current, $pendingBreak).$token->raw;
                 $pendingBreak = false;
 
                 continue;
             }
 
-            $pieces = preg_split(self::BLANK_LINE, $token['raw']) ?: [$token['raw']];
+            $pieces = preg_split(self::BLANK_LINE, $token->raw) ?: [$token->raw];
 
             foreach ($pieces as $index => $piece) {
                 if ($index > 0) {
@@ -419,7 +437,7 @@ final class Autop
         $raw = '';
 
         for ($i = $from; $i < $to; $i++) {
-            $raw .= $this->tokens[$i]['raw'];
+            $raw .= $this->tokens[$i]->raw;
         }
 
         return $raw;
@@ -430,13 +448,13 @@ final class Autop
         for ($i = $from; $i < $to; $i++) {
             $token = $this->tokens[$i];
 
-            if ($token['block'] && $token['type'] === 'open' && ($close = $this->closers[$i] ?? null) !== null && $close < $to) {
+            if ($token->block && $token->type === 'open' && ($close = $this->closers[$i] ?? null) !== null && $close < $to) {
                 $i = $close;
 
                 continue;
             }
 
-            if ($token['type'] === 'text' && trim($token['raw']) !== '' && preg_match(self::BLANK_LINE, trim($token['raw'])) === 1) {
+            if ($token->type === 'text' && trim($token->raw) !== '' && preg_match(self::BLANK_LINE, trim($token->raw)) === 1) {
                 return true;
             }
         }
@@ -447,7 +465,7 @@ final class Autop
     private function hasBlockChild(int $from, int $to): bool
     {
         for ($i = $from; $i < $to; $i++) {
-            if ($this->tokens[$i]['block']) {
+            if ($this->tokens[$i]->block) {
                 return true;
             }
         }

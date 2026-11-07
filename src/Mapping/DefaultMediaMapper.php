@@ -25,6 +25,9 @@ class DefaultMediaMapper implements MediaMapper
 {
     use StoresSourceTimestamps;
 
+    /** Extensions a web server may hand to an interpreter, never copied. */
+    private const string EXECUTABLE_EXTENSIONS = '/^(?:php\d*|phtml|pht|phps|phar|inc|cgi|fcgi|pl|py|rb|sh|bash|asp|aspx|ashx|asmx|cer|jsp|jspx|shtml?|htaccess|htpasswd|ini|exe|dll|bat|cmd|com)$/';
+
     public function __construct(
         protected readonly Repository $config,
         protected readonly FilesystemFactory $filesystems,
@@ -50,6 +53,8 @@ class DefaultMediaMapper implements MediaMapper
             $context->warn($media->id, 'Attachment has no file (_wp_attached_file is missing).');
         } elseif ($file === null) {
             $context->warn($media->id, sprintf('Attachment file "%s" is not a relative path inside the uploads directory; it was not copied.', $media->file));
+        } elseif (! $this->allowedType($file)) {
+            $context->warn($media->id, sprintf('File type of %s is not allowed (wp-migrator.media.allowed_extensions); it was not copied.', $file));
         } else {
             $path = Media::pathFor($file);
 
@@ -100,7 +105,7 @@ class DefaultMediaMapper implements MediaMapper
         foreach ($media->sizes as $name => $size) {
             $variantFile = $this->safeRelativePath($prefix.$size->file);
 
-            if ($variantFile === null) {
+            if ($variantFile === null || ! $this->allowedType($variantFile)) {
                 $missing[] = $name;
 
                 continue;
@@ -156,6 +161,36 @@ class DefaultMediaMapper implements MediaMapper
         }
 
         return $disk->size($target);
+    }
+
+    /**
+     * Only files of the configured types are copied onto the disk, which is
+     * usually public. Hidden files and anything a web server might execute
+     * are refused in any case, also hidden behind a second extension as in
+     * "shell.php.jpg": a hacked site often hides a backdoor in its uploads.
+     */
+    protected function allowedType(string $file): bool
+    {
+        $name = basename($file);
+
+        if (str_starts_with($name, '.') || ! str_contains($name, '.')) {
+            return false;
+        }
+
+        $segments = array_map(strtolower(...), array_slice(explode('.', $name), 1));
+
+        foreach ($segments as $segment) {
+            if (preg_match(self::EXECUTABLE_EXTENSIONS, $segment) === 1) {
+                return false;
+            }
+        }
+
+        $allowed = array_map(
+            fn (mixed $extension): string => strtolower(ltrim((string) $extension, '.')),
+            $this->config->array('wp-migrator.media.allowed_extensions'),
+        );
+
+        return in_array((string) end($segments), $allowed, true);
     }
 
     /**

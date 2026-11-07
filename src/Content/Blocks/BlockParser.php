@@ -134,12 +134,18 @@ final class BlockParser
      */
     private function attributesMarker(string $content, int $cursor, string $name): ?array
     {
+        // Attributes end before the next comment opener. WP escapes "<" in
+        // serialized attributes, so valid ones never contain it, and the
+        // search areas of different markers cannot overlap. That keeps the
+        // total work linear in the length of the document.
+        $limit = strpos($content, '<!--', $cursor);
+        $limit = $limit === false ? strlen($content) : $limit;
         $search = $cursor;
 
         for ($attempt = 0; $attempt < self::MAX_TERMINATOR_ATTEMPTS; $attempt++) {
             $end = $this->nextTerminator($content, $search);
 
-            if ($end === false) {
+            if ($end === false || $end >= $limit) {
                 return null;
             }
 

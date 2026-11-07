@@ -172,6 +172,19 @@ it('never throws on garbage', function (string $html) {
     '[', ']', '[[', ']]', '[[]]', '[/', '[/]', '[gallery', '[gallery "', "[gallery '", '[gallery a=', '[gallery a="', "\xFF[gallery]\xFE", '<[gallery>', '<a href="[gallery]', '<code>[gallery]', '[[gallery', '[gallery]]', '[[box]x',
 ]);
 
+it('stays fast on markup that is never closed', function (string $html) {
+    $start = microtime(true);
+
+    $result = processShortcodes($html)[0];
+
+    expect(microtime(true) - $start)->toBeLessThan(5.0)
+        ->and($result)->toBeString();
+})->with([
+    'comments' => [str_repeat('<!-- [box] ', 200000)],
+    'closers inside one attribute' => ['[box]<a title="'.str_repeat('[/box]', 200000).'">'],
+    'closers inside many attributes' => ['[box]'.str_repeat('<a title="[/box]">', 100000)],
+]);
+
 it('stays fast on many unmatched tags', function () {
     $start = microtime(true);
 

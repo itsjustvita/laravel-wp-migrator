@@ -152,6 +152,19 @@ it('stays fast on many unclosed tags', function () {
         ->and(substr_count($result, '<div>'))->toBe(5000);
 });
 
+it('stays fast on markup that is never closed', function (string $html) {
+    $start = microtime(true);
+
+    $result = autop($html);
+
+    expect(microtime(true) - $start)->toBeLessThan(5.0)
+        ->and($result)->toBeString();
+})->with([
+    'comments' => [str_repeat('<!-- a ', 200000)],
+    'preformatted' => [str_repeat('<pre>', 100000)],
+    'scripts' => [str_repeat('<script>x', 100000)],
+]);
+
 it('copes with very deep nesting', function () {
     $depth = 2000;
 

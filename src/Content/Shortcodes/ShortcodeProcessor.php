@@ -85,9 +85,15 @@ final class ShortcodeProcessor
     private function skipHtml(string $html, int $start, callable $isKnown): array
     {
         if (substr($html, $start, 4) === '<!--') {
-            $end = strpos($html, '-->', $start + 4);
+            $end = isset($this->unclosed['-->']) ? false : strpos($html, '-->', $start + 4);
 
-            return $end === false ? ['<', $start + 1] : [substr($html, $start, $end + 3 - $start), $end + 3];
+            if ($end === false) {
+                $this->unclosed['-->'] = true;
+
+                return ['<', $start + 1];
+            }
+
+            return [substr($html, $start, $end + 3 - $start), $end + 3];
         }
 
         if (preg_match(self::HTML_TAG, $html, $matches, 0, $start) !== 1) {
@@ -210,11 +216,14 @@ final class ShortcodeProcessor
         $search = $from;
 
         while (($position = strpos($html, $closing, $search)) !== false) {
-            if (! $this->isInsideHtmlTag($html, $from, $position)) {
+            $tagEnd = $this->enclosingTagEnd($html, $from, $position);
+
+            if ($tagEnd === null) {
                 return $position;
             }
 
-            $search = $position + 1;
+            // Every closer inside this tag is skipped at once.
+            $search = $tagEnd;
         }
 
         $this->unclosed[$name] = true;
@@ -222,22 +231,25 @@ final class ShortcodeProcessor
         return false;
     }
 
-    private function isInsideHtmlTag(string $html, int $from, int $position): bool
+    /**
+     * The end of the HTML tag the position lies inside, or null when it lies
+     * outside of any tag.
+     */
+    private function enclosingTagEnd(string $html, int $from, int $position): ?int
     {
-        $before = substr($html, $from, $position - $from);
-        $lastOpen = strrpos($before, '<');
+        $lastOpen = strrpos($html, '<', $position - strlen($html));
 
-        if ($lastOpen === false) {
-            return false;
+        if ($lastOpen === false || $lastOpen < $from) {
+            return null;
         }
 
-        $tagStart = $from + $lastOpen;
-
-        if (preg_match(self::HTML_TAG, $html, $matches, 0, $tagStart) !== 1) {
-            return false;
+        if (preg_match(self::HTML_TAG, $html, $matches, 0, $lastOpen) !== 1) {
+            return null;
         }
 
-        return $tagStart + strlen($matches[0]) > $position;
+        $tagEnd = $lastOpen + strlen($matches[0]);
+
+        return $tagEnd > $position ? $tagEnd : null;
     }
 
     /**

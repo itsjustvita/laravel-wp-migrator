@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace ItsJustVita\WpMigrator\Content;
 
+use Illuminate\Config\Repository;
 use ItsJustVita\WpMigrator\Content\Blocks\Block;
+use ItsJustVita\WpMigrator\Content\Blocks\BlockDepth;
 use ItsJustVita\WpMigrator\Content\Blocks\BlockParser;
 use ItsJustVita\WpMigrator\Content\Blocks\BlockRenderer;
 use ItsJustVita\WpMigrator\Content\Shortcodes\Shortcode;
@@ -16,6 +18,7 @@ use ItsJustVita\WpMigrator\Import\SourceType;
 use ItsJustVita\WpMigrator\Models\Media;
 use ItsJustVita\WpMigrator\Source\Dto\SourcePost;
 use ItsJustVita\WpMigrator\Source\WpDatabase;
+use ItsJustVita\WpMigrator\Support\JsonDepth;
 use ItsJustVita\WpMigrator\WpMigrator;
 
 /**
@@ -57,6 +60,7 @@ class ContentTransformer
         private readonly BlockRenderer $renderer,
         private readonly WpMigrator $registry,
         private readonly WpDatabase $db,
+        private readonly Repository $config,
     ) {}
 
     /**
@@ -74,7 +78,22 @@ class ContentTransformer
             return $this->transformClassic($post->content, $post->id, $context);
         }
 
-        return $this->transformBlocks($blocks, $post->id, $context, []);
+        $blocks = BlockDepth::limit(
+            $this->transformBlocks($blocks, $post->id, $context, []),
+            $this->config->integer('wp-migrator.content.max_json_depth', JsonDepth::MARIADB_LIMIT),
+            $merged,
+        );
+
+        if ($merged > 0) {
+            $context->warn($post->id, sprintf(
+                '%d %s nested too deeply for the database and kept only as HTML inside %s parent.',
+                $merged,
+                $merged === 1 ? 'block was' : 'blocks were',
+                $merged === 1 ? 'its' : 'their',
+            ));
+        }
+
+        return $blocks;
     }
 
     /**

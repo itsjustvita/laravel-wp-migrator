@@ -124,6 +124,32 @@ return [
         'directory' => 'wp-uploads',
         'download_missing' => true,
         'download_timeout' => 30,
+
+        // Only files of these types are copied. SVG and HTML files can run
+        // script in the browser and are left out on purpose. Files a web
+        // server could execute, such as .php, are never copied.
+        'allowed_extensions' => [
+            'jpg', 'jpeg', 'jpe', 'png', 'gif', 'webp', 'avif', 'bmp', 'ico', 'tif', 'tiff', 'heic', 'heif',
+            'mp3', 'm4a', 'ogg', 'oga', 'wav', 'flac', 'aac', 'opus',
+            'mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'wmv', 'mpg', 'mpeg', '3gp',
+            'pdf', 'doc', 'docx', 'odt', 'rtf', 'txt', 'csv', 'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'odp',
+            'key', 'pages', 'numbers', 'epub', 'zip', 'vtt', 'srt',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Content
+    |--------------------------------------------------------------------------
+    |
+    | The deepest nesting of arrays and objects in the stored block tree.
+    | MariaDB refuses JSON deeper than 31, MySQL deeper than 100. Blocks
+    | that would nest deeper are kept as HTML inside their parent.
+    |
+    */
+
+    'content' => [
+        'max_json_depth' => 31,
     ],
 
     /*

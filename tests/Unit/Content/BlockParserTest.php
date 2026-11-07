@@ -290,7 +290,19 @@ it('stays fast on many broken markers', function (string $content) {
     'a terminator after every marker' => [str_repeat('<!-- wp:a {"b":1 -->', 100000)],
     'terminators that almost end the attributes' => [str_repeat('<!-- wp:a {"b":"} -->', 50000)],
     'no terminator at all' => [str_repeat('<!-- wp:a {"b":1 ', 100000)],
+    'markers before one distant terminator' => [str_repeat('<!-- wp:a {"b":"', 20000).str_repeat('x', 1000000).'"} -->'],
+    'markers before many distant terminators' => [str_repeat('<!-- wp:a {"b":"', 20000).str_repeat('x', 500000).str_repeat('"} -->', 40)],
 ]);
+
+it('treats attributes that contain a comment opener as plain html', function () {
+    $content = '<!-- wp:acme/x {"html":"<!-- note -->"} -->y<!-- /wp:acme/x -->';
+
+    $blocks = parseBlocks($content);
+
+    expect($blocks)->toHaveCount(1)
+        ->and($blocks[0]->isFreeform())->toBeTrue()
+        ->and($blocks[0]->innerHtml)->toBe($content);
+});
 
 it('converts to and from the stored array form', function () {
     $tree = parseBlocks('<p>free</p><!-- wp:group {"a":1} --><div><!-- wp:spacer /--></div><!-- /wp:group -->');
