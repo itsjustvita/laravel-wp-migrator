@@ -9,6 +9,7 @@
         "gutenberg",
         "blocks"
     ],
+    "homepage": "https://github.com/itsjustvita/laravel-wp-migrator",
     "license": "MIT",
     "type": "library",
     "authors": [
@@ -16,6 +17,10 @@
             "name": "Vitalis Feist-Wurm"
         }
     ],
+    "support": {
+        "issues": "https://github.com/itsjustvita/laravel-wp-migrator/issues",
+        "source": "https://github.com/itsjustvita/laravel-wp-migrator"
+    },
     "require": {
         "php": "^8.3",
         "guzzlehttp/guzzle": "^7.8.2 || ^8.0",

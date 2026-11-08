@@ -79,13 +79,20 @@ jobs:
         run: vendor/bin/pest --ci
 
   # SQLite accepts queries that real databases refuse, so the suite also runs
-  # on both servers. It takes minutes there, so once each is enough.
+  # on both servers, including the import of the fixture site.
   database:
-    name: ${{ matrix.db.name }}
+    name: ${{ matrix.db.name }} / PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        php: ['8.3', '8.4']
+        laravel: ['12.*', '13.*']
+        include:
+          - laravel: '12.*'
+            testbench: '10.*'
+          - laravel: '13.*'
+            testbench: '11.*'
         db:
           - name: mysql
             image: mysql:8.4
@@ -121,12 +128,14 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: ${{ matrix.php }}
           extensions: mbstring, intl, pdo, pdo_mysql, pdo_sqlite, sqlite3
           coverage: none
 
       - name: Install dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
+        run: |
+          composer require --dev "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+          composer update --prefer-dist --no-interaction --no-progress
 
       - name: Pest
         run: vendor/bin/pest --ci

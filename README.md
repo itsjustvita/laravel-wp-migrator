@@ -1,10 +1,12 @@
 # laravel-wp-migrator
 
+[![CI](https://github.com/itsjustvita/laravel-wp-migrator/actions/workflows/ci.yml/badge.svg)](https://github.com/itsjustvita/laravel-wp-migrator/actions/workflows/ci.yml)
+
 Move a WP site's content into a clean Laravel application without losing data, URLs or rankings.
 
 The package migrates posts, pages, custom post types, media, taxonomies, menus, users and comments into its own schema, parses block and classic content into a renderable structure, imports SEO meta and custom fields, keeps old URLs alive through redirects, and lets existing users keep their passwords. It does not convert theme or plugin code. Instead, it produces an inventory of the theme and a migration plan for rebuilding the frontend in Blade.
 
-> **Status:** early development. The public API is not stable yet.
+> **Status:** 0.1, ready for trial migrations. The API may still change before 1.0. The theme inventory and migration plan described below are not available yet. See the [changelog](CHANGELOG.md).
 
 ## Requirements
 
