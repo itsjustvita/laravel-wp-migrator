@@ -90,7 +90,16 @@ class DefaultNavigationMapper implements NavigationMapper
             }
 
             $label = $block->attr('label');
-            $item = $this->createItem($menu, $parent, is_string($label) ? $label : '', $this->link($block, $navigation->id, $context), $block, $order);
+            $label = is_string($label) ? $label : '';
+            $link = $this->link($block, $navigation->id, $context);
+
+            if ($link->unpublished && $block->innerBlocks === []) {
+                $context->warn($navigation->id, sprintf('The navigation link "%s" points to content that is not published and was left out.', $label));
+
+                continue;
+            }
+
+            $item = $this->createItem($menu, $parent, $label, $link->unpublished ? new MenuLink(null) : $link, $block, $order);
 
             $this->createItems($block->innerBlocks, $menu, $item, $navigation, $context, $order, $leftOut);
         }
@@ -121,7 +130,7 @@ class DefaultNavigationMapper implements NavigationMapper
         if (is_int($id) && $kind === 'post-type') {
             $link = $this->links->post($id, $navigationId, $context);
 
-            return $link->url !== null ? $link : $this->links->custom($url, $navigationId, $context);
+            return $link->url !== null || $link->unpublished ? $link : $this->links->custom($url, $navigationId, $context);
         }
 
         if (is_int($id) && $kind === 'taxonomy') {

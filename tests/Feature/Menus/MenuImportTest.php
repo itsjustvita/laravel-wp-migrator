@@ -220,3 +220,62 @@ it('does not accept a parent that is not a menu item', function () {
     expect(MenuItem::query()->sole()->parent_id)->toBeNull()
         ->and(array_column($report->unresolvedReferences(), 'kind'))->toBe(['parent menu item']);
 });
+
+it('refuses menu links that can run script', function (string $url) {
+    $main = $this->site->menu('Main', 'main');
+    $this->site->menuItem($main, ['title' => 'Evil', 'url' => $url]);
+
+    $report = importMenus();
+
+    expect(MenuItem::query()->sole()->url)->toBeNull()
+        ->and($report->warnings()[0]['message'])->toContain('not a safe link');
+})->with(['javascript:alert(1)', ' JavaScript:alert(1)', 'data:text/html,x']);
+
+it('keeps mail, phone and anchor links', function () {
+    $main = $this->site->menu('Main', 'main');
+    $this->site->menuItem($main, ['title' => 'Mail', 'order' => 1, 'url' => 'mailto:hello@example.net']);
+    $this->site->menuItem($main, ['title' => 'Phone', 'order' => 2, 'url' => 'tel:+49123']);
+    $this->site->menuItem($main, ['title' => 'Anchor', 'order' => 3, 'url' => '#contact']);
+
+    importMenus();
+
+    expect(MenuItem::query()->orderBy('order')->pluck('url')->all())->toBe(['mailto:hello@example.net', 'tel:+49123', '#contact']);
+});
+
+it('leaves out items that link to unpublished content, like WP does', function (string $status) {
+    $hidden = $this->site->page(['post_title' => 'Hidden plans', 'post_name' => 'hidden', 'post_status' => $status, 'post_author' => 0]);
+    $main = $this->site->menu('Main', 'main');
+    $this->site->menuItem($main, ['type' => 'post_type', 'object' => 'page', 'object_id' => $hidden]);
+
+    $report = importMenus();
+
+    expect(MenuItem::count())->toBe(0)
+        ->and(collect($report->skippedItems())->pluck('reason')->all())->toContain('it links to content that is not published');
+})->with(['draft', 'private', 'pending', 'future']);
+
+it('removes an item when the content it links to is no longer published', function () {
+    $main = $this->site->menu('Main', 'main');
+    $this->site->menuItem($main, ['type' => 'post_type', 'object' => 'page', 'object_id' => $this->about]);
+    importMenus();
+    $this->site->table('posts')->where('ID', $this->about)->update(['post_status' => 'private', 'post_modified_gmt' => '2026-02-01 00:00:00']);
+    $this->site->table('posts')->where('post_type', 'nav_menu_item')->update(['post_modified_gmt' => '2026-02-01 00:00:00']);
+
+    app(ImportRunner::class)->run(new ImportOptions(only: ['posts', 'pages', 'terms', 'menus'], force: true));
+
+    expect(MenuItem::count())->toBe(0);
+});
+
+it('leaves unpublished and unsafe links out of navigation menus', function () {
+    $draft = $this->site->page(['post_title' => 'Draft page', 'post_status' => 'draft', 'post_author' => 0]);
+    $this->site->post(['post_type' => 'wp_navigation', 'post_title' => 'Nav', 'post_name' => 'nav', 'post_author' => 0,
+        'post_content' => '<!-- wp:navigation-link {"label":"Draft","type":"page","id":'.$draft.',"url":"https://old.example.com/?page_id='.$draft.'","kind":"post-type"} /-->'
+            .'<!-- wp:navigation-link {"label":"Evil","url":"javascript:alert(1)","kind":"custom"} /-->'
+            .'<!-- wp:navigation-link {"label":"Fine","url":"/fine/","kind":"custom"} /-->']);
+
+    $report = importMenus();
+
+    expect(MenuItem::query()->orderBy('order')->get(['title', 'url'])->toArray())->toBe([
+        ['title' => 'Evil', 'url' => null],
+        ['title' => 'Fine', 'url' => '/fine/'],
+    ])->and(collect($report->warnings())->pluck('message')->implode(' '))->toContain('not published')->toContain('not a safe link');
+});

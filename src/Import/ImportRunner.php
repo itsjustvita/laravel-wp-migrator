@@ -28,6 +28,7 @@ use ItsJustVita\WpMigrator\Models\Post;
 use ItsJustVita\WpMigrator\Models\Redirect;
 use ItsJustVita\WpMigrator\Models\Term;
 use ItsJustVita\WpMigrator\Redirects\RedirectImporter;
+use ItsJustVita\WpMigrator\WpMigrator;
 
 /**
  * Runs the importers in dependency order: users, media, terms, posts, menus,
@@ -58,6 +59,8 @@ class ImportRunner
 
     public function run(ImportOptions $options, ImportProgress $progress = new NullProgress): ImportReport
     {
+        $this->container->make(WpMigrator::class)->forgetInstances();
+
         $report = new ImportReport($options->dryRun);
         $report->addFindings($this->detector->findings());
 

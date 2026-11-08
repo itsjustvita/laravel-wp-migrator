@@ -248,6 +248,15 @@ class WpMigrator
     }
 
     /**
+     * Forgets the mapper and handler instances, so the next import run gets
+     * fresh ones instead of ones holding what an earlier run read.
+     */
+    public function forgetInstances(): void
+    {
+        $this->instances = [];
+    }
+
+    /**
      * @template T of object
      *
      * @param  class-string  $class

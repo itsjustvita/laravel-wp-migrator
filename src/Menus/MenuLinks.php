@@ -10,6 +10,7 @@ use ItsJustVita\WpMigrator\Content\Urls\UrlResolver;
 use ItsJustVita\WpMigrator\Content\Urls\UrlRewriter;
 use ItsJustVita\WpMigrator\Import\ImportContext;
 use ItsJustVita\WpMigrator\Import\SourceType;
+use ItsJustVita\WpMigrator\Support\SafeUrl;
 
 /**
  * Where a menu entry points: its new URL and, for posts and terms, the model
@@ -28,6 +29,12 @@ class MenuLinks
     public function post(int $postId, int $itemId, ImportContext $context): MenuLink
     {
         $reference = $this->posts->findById($postId);
+
+        // WP hides menu entries for drafts and private posts; so does the import.
+        if ($reference !== null && $reference->status !== 'publish') {
+            return MenuLink::unpublished();
+        }
+
         $url = $reference === null ? null : $this->resolver->forPost($reference);
 
         if ($url === null) {
@@ -55,7 +62,17 @@ class MenuLinks
 
     public function custom(string $url, int $itemId, ImportContext $context): MenuLink
     {
-        return new MenuLink($url === '' ? null : $this->urls->rewrite($url, $itemId, $context));
+        if ($url === '') {
+            return new MenuLink(null);
+        }
+
+        if (! SafeUrl::isSafe($url)) {
+            $context->warn($itemId, sprintf('The menu link "%s" is not a safe link and was left out.', mb_substr($url, 0, 80)));
+
+            return new MenuLink(null);
+        }
+
+        return new MenuLink($this->urls->rewrite($url, $itemId, $context));
     }
 
     private function withTarget(MenuLink $link, SourceType $type, int $sourceId, int $itemId, ImportContext $context): MenuLink

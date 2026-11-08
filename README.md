@@ -168,11 +168,13 @@ Classic menus become rows in `menus` with their theme locations, and their items
 @endforeach
 ```
 
-Links to post type archives have no new URL and are listed in the report.
+Links to post type archives have no new URL and are listed in the report. Like WP, the import leaves out menu items that link to drafts, private or scheduled posts, and it drops links that could run script, such as `javascript:` URLs.
 
 ### Comments
 
 Comments are only imported when you turn them on with `comments.enabled`. Approved and pending comments are imported, threaded, attached to whatever model their post became. Spam, trash, pingbacks and trackbacks are left out, and so are IP addresses and user agents.
+
+Comments come from visitors, so their HTML is reduced to the tags WP allows in comments, such as links, emphasis and quotes, and author URLs other than web addresses are dropped. Escape what you show with `{{ }}` anyway, except the content, which is safe to output with `{!! !!}`.
 
 ### Users and passwords
 

@@ -567,3 +567,19 @@ it('stores the seo settings for the model a post was mapped onto', function () {
     expect(Post::query()->sole()->seo?->title)->toBe('News - Acme')
         ->and(SeoMeta::query()->whereMorphedTo('seoable', Event::query()->sole())->value('description'))->toBe('Live music');
 });
+
+it('reads the source afresh on every run in the same process', function () {
+    $site = $this->source();
+    $site->option('home', 'https://old.example.com');
+    $site->option('permalink_structure', '/%postname%/');
+    $site->post(['post_title' => 'Target', 'post_name' => 'first-slug', 'post_author' => 0]);
+    $linking = $site->post(['post_title' => 'Linking', 'post_author' => 0, 'post_content' => '<a href="/first-slug/">x</a>']);
+    runImport(new ImportOptions(only: ['posts']));
+
+    $site->table('posts')->where('post_title', 'Target')->update(['post_name' => 'second-slug', 'post_modified_gmt' => '2026-02-01 00:00:00']);
+    $site->table('posts')->where('ID', $linking)->update(['post_content' => '<a href="/second-slug/">x</a>', 'post_modified_gmt' => '2026-02-01 00:00:00']);
+    $report = runImport(new ImportOptions(only: ['posts']));
+
+    expect($report->unresolvedReferences())->toBe([])
+        ->and(Post::query()->where('title', 'Linking')->sole()->blocks[0]['innerHTML'])->toContain('/blog/second-slug');
+});

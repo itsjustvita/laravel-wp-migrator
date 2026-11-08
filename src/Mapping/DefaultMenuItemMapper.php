@@ -27,7 +27,17 @@ class DefaultMenuItemMapper implements MenuItemMapper
             return null;
         }
 
-        $model = $context->existing(SourceType::Post, $item->id, MenuItem::class) ?? new MenuItem;
+        $existing = $context->existing(SourceType::Post, $item->id, MenuItem::class);
+        $link = $this->link($item, $context);
+
+        if ($link->unpublished) {
+            $existing?->delete();
+            $context->skip('it links to content that is not published');
+
+            return null;
+        }
+
+        $model = $existing ?? new MenuItem;
 
         $model->fill([
             'menu_id' => $menuId,
@@ -36,7 +46,7 @@ class DefaultMenuItemMapper implements MenuItemMapper
             'order' => max(0, $item->order),
             'target' => $item->target === '_blank' ? '_blank' : null,
             'classes' => $item->classes === [] ? null : $item->classes,
-            ...$this->link($item, $context)->attributes(),
+            ...$link->attributes(),
         ])->save();
 
         return $model;

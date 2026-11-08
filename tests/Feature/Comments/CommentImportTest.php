@@ -114,3 +114,25 @@ it('warns when comments are requested but disabled', function () {
         ->expectsOutputToContain('wp-migrator.comments.enabled')
         ->assertSuccessful();
 });
+
+it('cleans up what visitors wrote', function () {
+    $this->site->comment($this->post, [
+        'comment_author_url' => 'javascript:alert(1)',
+        'comment_content' => 'Nice <strong onclick="x">post</strong><script>steal()</script> <a href="javascript:x">link</a>',
+    ]);
+
+    importComments();
+
+    $comment = Comment::query()->sole();
+
+    expect($comment->author_url)->toBeNull()
+        ->and($comment->content)->toBe('Nice <strong>post</strong> link');
+});
+
+it('keeps author urls of the web', function () {
+    $this->site->comment($this->post, ['comment_author_url' => 'https://visitor.example/blog']);
+
+    importComments();
+
+    expect(Comment::query()->sole()->author_url)->toBe('https://visitor.example/blog');
+});
