@@ -12,11 +12,19 @@ use ItsJustVita\WpMigrator\Content\Shortcodes\Handlers\EmbedHandler;
 use ItsJustVita\WpMigrator\Content\Shortcodes\Handlers\GalleryHandler;
 use ItsJustVita\WpMigrator\Content\Shortcodes\Handlers\VideoHandler;
 use ItsJustVita\WpMigrator\Content\Shortcodes\ShortcodeHandler;
+use ItsJustVita\WpMigrator\Mapping\CommentMapper;
+use ItsJustVita\WpMigrator\Mapping\DefaultCommentMapper;
 use ItsJustVita\WpMigrator\Mapping\DefaultMediaMapper;
+use ItsJustVita\WpMigrator\Mapping\DefaultMenuItemMapper;
+use ItsJustVita\WpMigrator\Mapping\DefaultMenuMapper;
+use ItsJustVita\WpMigrator\Mapping\DefaultNavigationMapper;
 use ItsJustVita\WpMigrator\Mapping\DefaultPostMapper;
 use ItsJustVita\WpMigrator\Mapping\DefaultTermMapper;
 use ItsJustVita\WpMigrator\Mapping\DefaultUserMapper;
 use ItsJustVita\WpMigrator\Mapping\MediaMapper;
+use ItsJustVita\WpMigrator\Mapping\MenuItemMapper;
+use ItsJustVita\WpMigrator\Mapping\MenuMapper;
+use ItsJustVita\WpMigrator\Mapping\NavigationMapper;
 use ItsJustVita\WpMigrator\Mapping\PostMapper;
 use ItsJustVita\WpMigrator\Mapping\TermMapper;
 use ItsJustVita\WpMigrator\Mapping\UserMapper;
@@ -40,6 +48,18 @@ class WpMigrator
 
     /** @var class-string<MediaMapper> */
     private string $mediaMapper = DefaultMediaMapper::class;
+
+    /** @var class-string<MenuMapper> */
+    private string $menuMapper = DefaultMenuMapper::class;
+
+    /** @var class-string<MenuItemMapper> */
+    private string $menuItemMapper = DefaultMenuItemMapper::class;
+
+    /** @var class-string<NavigationMapper> */
+    private string $navigationMapper = DefaultNavigationMapper::class;
+
+    /** @var class-string<CommentMapper> */
+    private string $commentMapper = DefaultCommentMapper::class;
 
     /** @var array<string, class-string<ShortcodeHandler>> */
     private array $shortcodes = [
@@ -101,6 +121,70 @@ class WpMigrator
         unset($this->instances['media']);
 
         return $this;
+    }
+
+    /**
+     * @param  class-string<MenuMapper>  $mapper
+     */
+    public function mapMenus(string $mapper): static
+    {
+        $this->menuMapper = $this->ensureImplements($mapper, MenuMapper::class);
+        unset($this->instances['menu']);
+
+        return $this;
+    }
+
+    /**
+     * @param  class-string<MenuItemMapper>  $mapper
+     */
+    public function mapMenuItems(string $mapper): static
+    {
+        $this->menuItemMapper = $this->ensureImplements($mapper, MenuItemMapper::class);
+        unset($this->instances['menu item']);
+
+        return $this;
+    }
+
+    /**
+     * @param  class-string<NavigationMapper>  $mapper
+     */
+    public function mapNavigation(string $mapper): static
+    {
+        $this->navigationMapper = $this->ensureImplements($mapper, NavigationMapper::class);
+        unset($this->instances['navigation']);
+
+        return $this;
+    }
+
+    /**
+     * @param  class-string<CommentMapper>  $mapper
+     */
+    public function mapComments(string $mapper): static
+    {
+        $this->commentMapper = $this->ensureImplements($mapper, CommentMapper::class);
+        unset($this->instances['comment']);
+
+        return $this;
+    }
+
+    public function menuMapper(): MenuMapper
+    {
+        return $this->instance('menu', $this->menuMapper, MenuMapper::class);
+    }
+
+    public function menuItemMapper(): MenuItemMapper
+    {
+        return $this->instance('menu item', $this->menuItemMapper, MenuItemMapper::class);
+    }
+
+    public function navigationMapper(): NavigationMapper
+    {
+        return $this->instance('navigation', $this->navigationMapper, NavigationMapper::class);
+    }
+
+    public function commentMapper(): CommentMapper
+    {
+        return $this->instance('comment', $this->commentMapper, CommentMapper::class);
     }
 
     /**

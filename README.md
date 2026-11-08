@@ -41,7 +41,7 @@ Check the connection and paths, and see what the site contains:
 php artisan wp:check
 ```
 
-Import the content. The importers run in dependency order: users, media, terms, posts.
+Import the content. The importers run in dependency order: users, media, terms, posts, menus, comments and redirects.
 
 ```bash
 php artisan wp:import
@@ -52,15 +52,13 @@ php artisan wp:import --type=event --since=2026-10-01
 
 | Option | Effect |
 | --- | --- |
-| `--only` | Comma-separated importers: `users`, `media`, `terms`, `posts`, `pages`, `redirects`. `posts` covers every post type except pages. |
+| `--only` | Comma-separated importers: `users`, `media`, `terms`, `posts`, `pages`, `menus`, `comments`, `redirects`. `posts` covers every post type except pages. |
 | `--type` | Comma-separated post types to import. |
 | `--since` | Only posts and media modified on or after this date. |
 | `--dry-run` | Rolls every change back at the end and copies no files. |
 | `--force` | Maps rows again even when they are unchanged, for example after changing the configuration. |
 
 Imports are idempotent. Unchanged rows are skipped, changed rows are updated, and an aborted run can simply be started again. A post that refers to a post imported later in the same run is mapped once more at the end of the run. Whatever still cannot be resolved is mapped again on the next run. Every run writes a report to `storage/logs/wp-migrator-<timestamp>.md`.
-
-Menus and comments are not available yet.
 
 Media files are only copied when their extension is listed in `media.allowed_extensions`. Files a web server could execute, such as `.php`, are never copied, also not behind a second extension like `shell.php.jpg`: hacked sites often hide a backdoor in their uploads. SVG and HTML files can run script in the browser and are left out by default.
 
@@ -159,6 +157,22 @@ Render the tags in your layout:
 ```
 
 The title falls back to the model's `title`. SEO settings attach to whatever model a post was mapped onto. Add the `ItsJustVita\WpMigrator\Models\Concerns\HasSeoMeta` trait to your own models to eager load them with `->with('seo')`.
+
+### Menus
+
+Classic menus become rows in `menus` with their theme locations, and their items rows in `menu_items`, nested and in order. Block themes keep their menus as navigation blocks; each of those becomes a menu too. A menu item that links to a post or term gets its new URL and a `linkable` relation to the imported model, so you can render menus straight from the database:
+
+```blade
+@foreach (\ItsJustVita\WpMigrator\Models\Menu::where('slug', 'main')->first()?->items->whereNull('parent_id') ?? [] as $item)
+    <a href="{{ $item->url }}" @if ($item->target) target="{{ $item->target }}" @endif>{{ $item->title }}</a>
+@endforeach
+```
+
+Links to post type archives have no new URL and are listed in the report.
+
+### Comments
+
+Comments are only imported when you turn them on with `comments.enabled`. Approved and pending comments are imported, threaded, attached to whatever model their post became. Spam, trash, pingbacks and trackbacks are left out, and so are IP addresses and user agents.
 
 ### Users and passwords
 
@@ -260,7 +274,11 @@ WP_MIGRATOR_TEST_DB_PASSWORD=root \
 composer test
 ```
 
-These tests drop every table in the given database and in a database called `wp_migrator_target`, so point them at a throwaway server.
+These tests drop every table in the given database and in a database called `wp_migrator_target`, so point them at a throwaway server. They also import a complete site built with a real WordPress installation, twice, and check that the second run changes nothing. Rebuild that site after changing its content in `tests/Fixtures/wordpress/content.php`:
+
+```bash
+tests/Fixtures/wordpress/build.sh
+```
 
 ## Licence
 

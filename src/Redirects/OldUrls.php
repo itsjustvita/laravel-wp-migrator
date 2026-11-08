@@ -9,13 +9,12 @@ use Illuminate\Config\Repository;
 use ItsJustVita\WpMigrator\Content\Urls\AuthorReference;
 use ItsJustVita\WpMigrator\Content\Urls\MediaUrls;
 use ItsJustVita\WpMigrator\Content\Urls\PostUrlIndex;
-use ItsJustVita\WpMigrator\Content\Urls\TermReference;
+use ItsJustVita\WpMigrator\Content\Urls\TermIndex;
 use ItsJustVita\WpMigrator\Content\Urls\UrlResolver;
 use ItsJustVita\WpMigrator\Import\ImportMap;
 use ItsJustVita\WpMigrator\Import\SourceType;
 use ItsJustVita\WpMigrator\Models\Media;
 use ItsJustVita\WpMigrator\Source\WpDatabase;
-use ItsJustVita\WpMigrator\Support\Hierarchy;
 
 /**
  * Works out the URLs the old site answered to: the permalinks of posts,
@@ -28,6 +27,7 @@ class OldUrls
     public function __construct(
         private readonly WpDatabase $db,
         private readonly PostUrlIndex $posts,
+        private readonly TermIndex $terms,
         private readonly UrlResolver $resolver,
         private readonly ImportMap $map,
         private readonly MediaUrls $media,
@@ -121,40 +121,16 @@ class OldUrls
      */
     private function terms(string $taxonomy, ?string $base, string $queryVar): Generator
     {
-        $taxonomies = $this->db->tableName('term_taxonomy');
-        $terms = $this->db->tableName('terms');
+        foreach ($this->terms->taxonomy($taxonomy) as $term) {
+            $from = [];
 
-        $rows = $this->db->table('term_taxonomy')
-            ->join($terms, $terms.'.term_id', '=', $taxonomies.'.term_id')
-            ->where($taxonomies.'.taxonomy', $taxonomy)
-            ->orderBy($terms.'.term_id')
-            ->get([$terms.'.term_id', $terms.'.slug', $terms.'.name', $taxonomies.'.parent']);
-
-        $slugs = [];
-        $parents = [];
-        $names = [];
-
-        foreach ($rows as $row) {
-            $id = (int) $row->term_id;
-            $slugs[$id] = rawurldecode((string) $row->slug);
-            $names[$id] = (string) $row->name;
-            $parents[$id] = (int) $row->parent;
-        }
-
-        foreach (Hierarchy::levels($parents) as $level) {
-            foreach ($level as $id) {
-                $term = new TermReference($id, $taxonomy, $slugs[$id], $this->termPath($id, $slugs, $parents), $names[$id]);
-
-                $from = [];
-
-                if ($base !== null) {
-                    $from[] = '/'.$base.'/'.($taxonomy === 'category' ? $term->path : $term->slug);
-                }
-
-                $from[] = '/?'.$queryVar.'='.($queryVar === 'cat' ? $id : $term->slug);
-
-                yield new RedirectCandidate($from, $this->resolver->forTerm($term), $id, $taxonomy.' '.$term->slug);
+            if ($base !== null) {
+                $from[] = '/'.$base.'/'.($taxonomy === 'category' ? $term->path : $term->slug);
             }
+
+            $from[] = '/?'.$queryVar.'='.($queryVar === 'cat' ? $term->id : $term->slug);
+
+            yield new RedirectCandidate($from, $this->resolver->forTerm($term), $term->id, $taxonomy.' '.$term->slug);
         }
     }
 
@@ -188,25 +164,6 @@ class OldUrls
 
             yield new RedirectCandidate($from, $this->resolver->forAuthor($author), $author->id, 'author '.$author->nicename);
         }
-    }
-
-    /**
-     * @param  array<int, string>  $slugs
-     * @param  array<int, int>  $parents
-     */
-    private function termPath(int $id, array $slugs, array $parents): string
-    {
-        $segments = [$slugs[$id]];
-        $seen = [$id => true];
-        $current = $parents[$id] ?? 0;
-
-        while ($current !== 0 && isset($slugs[$current]) && ! isset($seen[$current])) {
-            array_unshift($segments, $slugs[$current]);
-            $seen[$current] = true;
-            $current = $parents[$current] ?? 0;
-        }
-
-        return implode('/', $segments);
     }
 
     private function base(string $option, string $default): string

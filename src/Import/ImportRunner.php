@@ -10,21 +10,28 @@ use Illuminate\Database\Connection;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Model;
 use ItsJustVita\WpMigrator\Detection\UnsupportedContentDetector;
+use ItsJustVita\WpMigrator\Import\Importers\CommentImporter;
 use ItsJustVita\WpMigrator\Import\Importers\Importer;
 use ItsJustVita\WpMigrator\Import\Importers\MediaImporter;
+use ItsJustVita\WpMigrator\Import\Importers\MenuImporter;
+use ItsJustVita\WpMigrator\Import\Importers\MenuItemImporter;
+use ItsJustVita\WpMigrator\Import\Importers\NavigationImporter;
 use ItsJustVita\WpMigrator\Import\Importers\PostImporter;
 use ItsJustVita\WpMigrator\Import\Importers\TermImporter;
 use ItsJustVita\WpMigrator\Import\Importers\UserImporter;
+use ItsJustVita\WpMigrator\Models\Comment;
 use ItsJustVita\WpMigrator\Models\ImportMapEntry;
 use ItsJustVita\WpMigrator\Models\Media;
+use ItsJustVita\WpMigrator\Models\Menu;
+use ItsJustVita\WpMigrator\Models\MenuItem;
 use ItsJustVita\WpMigrator\Models\Post;
 use ItsJustVita\WpMigrator\Models\Redirect;
 use ItsJustVita\WpMigrator\Models\Term;
 use ItsJustVita\WpMigrator\Redirects\RedirectImporter;
 
 /**
- * Runs the importers in dependency order: users, media, terms, posts and
- * finally the redirects, which point to what the others imported.
+ * Runs the importers in dependency order: users, media, terms, posts, menus,
+ * comments and finally the redirects, which point to what the others imported.
  */
 class ImportRunner
 {
@@ -34,6 +41,10 @@ class ImportRunner
         MediaImporter::class,
         TermImporter::class,
         PostImporter::class,
+        MenuImporter::class,
+        MenuItemImporter::class,
+        NavigationImporter::class,
+        CommentImporter::class,
         RedirectImporter::class,
     ];
 
@@ -90,7 +101,7 @@ class ImportRunner
      */
     private function beginDryRun(): array
     {
-        $models = [ImportMapEntry::class, Post::class, Media::class, Term::class, Redirect::class];
+        $models = [ImportMapEntry::class, Post::class, Media::class, Term::class, Menu::class, MenuItem::class, Comment::class, Redirect::class];
         $userModel = $this->config->get('wp-migrator.users.model') ?? $this->config->get('auth.providers.users.model');
 
         if (is_string($userModel) && is_subclass_of($userModel, Model::class)) {

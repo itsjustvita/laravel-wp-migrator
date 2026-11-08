@@ -126,7 +126,7 @@ it('imports users, media, terms and posts in dependency order', function () {
 
     $report = runImport();
 
-    expect(array_keys($report->counts()))->toBe(['users', 'media', 'terms', 'posts', 'redirects'])
+    expect(array_keys($report->counts()))->toBe(['users', 'media', 'terms', 'posts', 'menus', 'menu items', 'navigation menus', 'redirects'])
         ->and($report->counts())->toMatchArray([
             'users' => ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],
             'media' => ['created' => 1, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0, 'failed' => 0],

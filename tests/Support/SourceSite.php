@@ -129,6 +129,55 @@ final class SourceSite
         return $this->postMeta($postId, $name, $value)->postMeta($postId, '_'.$name, $key);
     }
 
+    public function menu(string $name, ?string $slug = null): int
+    {
+        return $this->term('nav_menu', $name, $slug === null ? [] : ['slug' => $slug]);
+    }
+
+    /**
+     * A classic menu item, stored as a post with its settings in post meta.
+     *
+     * @param  array{title?: string, order?: int, parent?: int, type?: string, object?: string, object_id?: int, url?: string, target?: string, classes?: list<string>, status?: string}  $item
+     */
+    public function menuItem(int $menu, array $item): int
+    {
+        $id = $this->post([
+            'post_type' => 'nav_menu_item',
+            'post_status' => $item['status'] ?? 'publish',
+            'post_title' => $item['title'] ?? '',
+            'post_name' => '',
+            'menu_order' => $item['order'] ?? 0,
+        ]);
+
+        $meta = [
+            '_menu_item_type' => $item['type'] ?? 'custom',
+            '_menu_item_object' => $item['object'] ?? 'custom',
+            '_menu_item_object_id' => (string) ($item['object_id'] ?? $id),
+            '_menu_item_menu_item_parent' => (string) ($item['parent'] ?? 0),
+            '_menu_item_url' => $item['url'] ?? '',
+            '_menu_item_target' => $item['target'] ?? '',
+            '_menu_item_classes' => serialize($item['classes'] ?? ['']),
+            '_menu_item_xfn' => '',
+        ];
+
+        foreach ($meta as $key => $value) {
+            $this->postMeta($id, $key, $value);
+        }
+
+        $this->attachTerm($id, $menu);
+
+        return $id;
+    }
+
+    /**
+     * @param  array<string, int>  $locations  location => menu term ID
+     */
+    public function menuLocations(array $locations, string $theme = 'twentytwentyone'): self
+    {
+        return $this->option('stylesheet', $theme)
+            ->option('theme_mods_'.$theme, serialize(['nav_menu_locations' => $locations]));
+    }
+
     public function postMeta(int $postId, string $key, string $value): self
     {
         $this->table('postmeta')->insert(['post_id' => $postId, 'meta_key' => $key, 'meta_value' => $value]);

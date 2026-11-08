@@ -30,24 +30,20 @@ class ImportCommand extends Command
 
         if ($only !== null) {
             foreach ($only as $name) {
-                if (! in_array($name, [...ImportOptions::AVAILABLE, ...ImportOptions::PLANNED], true)) {
+                if (! in_array($name, ImportOptions::AVAILABLE, true)) {
                     $this->components->error(sprintf(
                         'Unknown importer "%s". Available: %s.',
                         $name,
-                        implode(', ', [...ImportOptions::AVAILABLE, ...ImportOptions::PLANNED]),
+                        implode(', ', ImportOptions::AVAILABLE),
                     ));
 
                     return self::FAILURE;
                 }
             }
 
-            $planned = array_values(array_intersect($only, ImportOptions::PLANNED));
-
-            if ($planned !== []) {
-                $this->components->warn(implode(', ', $planned).': not available yet, skipped.');
+            if (in_array('comments', $only, true) && ! $config->boolean('wp-migrator.comments.enabled')) {
+                $this->components->warn('Comments are turned off. Set wp-migrator.comments.enabled to import them.');
             }
-
-            $only = array_values(array_diff($only, ImportOptions::PLANNED));
         }
 
         $since = null;

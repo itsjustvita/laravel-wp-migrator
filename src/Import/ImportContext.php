@@ -18,6 +18,8 @@ class ImportContext
 
     private bool $rowLinked = false;
 
+    private ?string $skipReason = null;
+
     public function __construct(
         public readonly ImportMap $map,
         public readonly ImportReport $report,
@@ -29,6 +31,20 @@ class ImportContext
     {
         $this->rowIncomplete = false;
         $this->rowLinked = false;
+        $this->skipReason = null;
+    }
+
+    /**
+     * Explains why the mapper is about to return no model, for the report.
+     */
+    public function skip(string $reason): void
+    {
+        $this->skipReason = $reason;
+    }
+
+    public function skipReason(): ?string
+    {
+        return $this->skipReason;
     }
 
     public function warn(int $sourceId, string $message): void

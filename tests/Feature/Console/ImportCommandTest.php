@@ -73,14 +73,6 @@ it('rejects unknown importers', function () {
         ->assertFailed();
 });
 
-it('says which importers are not available yet', function () {
-    $this->source();
-
-    $this->artisan('wp:import', ['--only' => 'menus,comments'])
-        ->expectsOutputToContain('menus, comments: not available yet')
-        ->assertSuccessful();
-});
-
 it('rejects an invalid since date', function () {
     $this->source();
 

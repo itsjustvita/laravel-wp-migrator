@@ -176,7 +176,7 @@ abstract class EntityImporter implements Importer
         }
 
         if ($model === null) {
-            $context->report->skipped($this->name(), $id, sprintf('%s returned no model', class_basename($this->mapperClass($record))));
+            $context->report->skipped($this->name(), $id, $context->skipReason() ?? sprintf('%s returned no model', class_basename($this->mapperClass($record))));
 
             return null;
         }

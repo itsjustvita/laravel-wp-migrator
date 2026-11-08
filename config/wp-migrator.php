@@ -195,6 +195,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Comments
+    |--------------------------------------------------------------------------
+    |
+    | Comments are only imported when enabled. "statuses" maps the WP status
+    | of the comments to import to the status they get; spam and trashed
+    | comments are left out unless you add them. "types" lists the comment
+    | types to import: "comment" and "" for older installations. Pingbacks,
+    | trackbacks and plugin types such as reviews are left out.
+    |
+    */
+
+    'comments' => [
+        'enabled' => false,
+
+        'statuses' => [
+            '1' => 'approved',
+            '0' => 'pending',
+        ],
+
+        'types' => ['comment', ''],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | SEO
     |--------------------------------------------------------------------------
     |
