@@ -215,7 +215,7 @@ Every imported user can log in with their old password, so check the accounts be
 ],
 ```
 
-Posts of an excluded user are imported without an author. An account that an earlier run imported stays in your application until you delete it; the report warns about it.
+A number is an ID; a string of digits is tried as an ID, a login and an email address, since logins can be numbers too. `wp:check` and the import report name entries that match no user. Posts of an excluded user are imported without an author. An account that an earlier run imported stays in your application until you delete it; the report warns about it.
 
 To let imported users log in with their old password, switch Laravel to the `wordpress` hashing driver:
 

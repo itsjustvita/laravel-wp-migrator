@@ -73,10 +73,15 @@ class ImportRunner
             $report->note('Forced: unchanged rows were mapped again');
         }
 
-        $excludedUsers = $this->container->make(ExcludedUsers::class)->ids();
+        $excluded = $this->container->make(ExcludedUsers::class);
+        $excludedUsers = $excluded->ids();
 
         if ($excludedUsers !== []) {
             $report->note(sprintf('Left out by users.excluded: %s %s', count($excludedUsers) === 1 ? 'user' : 'users', implode(', ', $excludedUsers)));
+        }
+
+        foreach ($excluded->unmatched() as $entry) {
+            $report->note(sprintf('users.excluded: "%s" matches no user; check the spelling', $entry));
         }
 
         $transactions = $options->dryRun ? $this->beginDryRun() : [];

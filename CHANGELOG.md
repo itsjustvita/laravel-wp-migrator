@@ -8,7 +8,7 @@ Changes from the first trial migration of a real site.
 
 ### Added
 
-- `users.excluded` leaves users out of the import, by ID, login or email address. A hacked site can hold an attacker's account, which would otherwise be imported with a working password. References to excluded users become empty, and the report warns about an excluded user that an earlier run imported.
+- `users.excluded` leaves users out of the import, by ID, login or email address; a string of digits counts as all three. A hacked site can hold an attacker's account, which would otherwise be imported with a working password. References to excluded users become empty, the report warns about an excluded user that an earlier run imported, and `wp:check` and the report name entries that match no user.
 - `wp:check` lists the administrators with their email address and registration date, and the migration plan asks to review them before the import.
 - The migration plan lists post types without pages of their own in a section of their own instead of giving them routes: those the theme registers as not public, and those the rewrite rules of the site do not lead to. Such post types often hold form entries or other personal data.
 - When no plugin is active, the migration plan lists the plugins installed next to the theme. Brevo, Brevo for WooCommerce and PRO Elements are classified.

@@ -111,7 +111,7 @@ it('lists the administrators to review and marks excluded ones', function () {
     $site->userMeta($planted, 'wp_capabilities', serialize(['administrator' => true]));
     $editor = $site->user(['user_login' => 'writer']);
     $site->userMeta($editor, 'wp_capabilities', serialize(['editor' => true]));
-    config()->set('wp-migrator.users.excluded', ['planted']);
+    config()->set('wp-migrator.users.excluded', ['planted', 'intrudr']);
 
     expect(Artisan::call('wp:check'))->toBe(0);
 
@@ -124,6 +124,8 @@ it('lists the administrators to review and marks excluded ones', function () {
         ->toMatch('/planted \\(p@evil\.example\) \.+ excluded/')
         ->toContain("A hacked site can hold an attacker's account")
         ->toContain('wp-migrator.users.excluded')
+        ->toContain('wp-migrator.users.excluded: "intrudr" matches no user. Check the spelling, or that account is imported.')
+        ->not->toContain('"planted" matches no user')
         ->not->toContain('writer (')
         ->not->toContain('2025-05-05');
 });

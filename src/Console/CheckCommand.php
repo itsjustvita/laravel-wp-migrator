@@ -168,6 +168,11 @@ class CheckCommand extends Command
 
     private function printAdministrators(SourceStats $stats, ExcludedUsers $excluded): void
     {
+        foreach ($excluded->unmatched() as $entry) {
+            $this->newLine();
+            $this->warn(sprintf(' wp-migrator.users.excluded: "%s" matches no user. Check the spelling, or that account is imported.', $entry));
+        }
+
         $administrators = $stats->administrators();
 
         if ($administrators === []) {

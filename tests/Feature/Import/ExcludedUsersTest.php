@@ -32,6 +32,36 @@ it('finds excluded users by ID, login and email address, ignoring case', functio
     expect(app(ExcludedUsers::class)->ids())->toBe([$second]);
 });
 
+it('tries a string of digits as an ID, a login and an email address', function () {
+    $site = $this->source();
+    $numeric = $site->user(['user_login' => '12345']);
+    $byId = $site->user(['user_login' => 'alice']);
+
+    config()->set('wp-migrator.users.excluded', ['12345', (string) $byId]);
+    expect(app(ExcludedUsers::class)->ids())->toBe([$numeric, $byId]);
+
+    config()->set('wp-migrator.users.excluded', [12345]);
+    expect(app(ExcludedUsers::class)->ids())->toBe([]);
+
+    config()->set('wp-migrator.users.excluded', [$numeric.'st-admin', '12345']);
+    expect(app(ExcludedUsers::class)->unmatched())->toBe([$numeric.'st-admin']);
+});
+
+it('names the entries that match no user', function () {
+    $site = $this->source();
+    $site->user(['user_login' => 'alice']);
+
+    config()->set('wp-migrator.users.excluded', ['Alice', 'intrudr', 404, 'nobody@example.com']);
+    $excluded = app(ExcludedUsers::class);
+
+    expect($excluded->unmatched())->toBe(['intrudr', '404', 'nobody@example.com'])
+        ->and($excluded->ids())->toHaveCount(1);
+
+    $report = importWithExclusions(['intrudr']);
+
+    expect($report->toMarkdown())->toContain('users.excluded: "intrudr" matches no user; check the spelling');
+});
+
 it('excludes nobody by default or with an old configuration', function () {
     $this->source()->user(['user_login' => 'alice']);
 
