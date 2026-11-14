@@ -6,7 +6,7 @@ Move a WP site's content into a clean Laravel application without losing data, U
 
 The package migrates posts, pages, custom post types, media, taxonomies, menus, users and comments into its own schema, parses block and classic content into a renderable structure, imports SEO meta and custom fields, keeps old URLs alive through redirects, and lets existing users keep their passwords. It does not convert theme or plugin code. Instead, it produces an inventory of the theme and a migration plan for rebuilding the frontend in Blade.
 
-> **Status:** ready for trial migrations. The API may still change before 1.0. See the [changelog](CHANGELOG.md).
+> **Status:** 1.0. Breaking changes to the public API come only with a new major version, see [Versioning](#versioning) and the [changelog](CHANGELOG.md).
 
 ## Requirements
 
@@ -287,6 +287,19 @@ class EventMapper implements PostMapper
 4. **Build the frontend.** Work through the plan: routes, views, components, shortcode handlers and block views. Run `php artisan wp:import --force` after changing handlers, mappers or URL patterns, so unchanged rows are mapped again.
 5. **Import the changes.** Shortly before going live, take a fresh copy of the database and the uploads and run `php artisan wp:import` again. It only brings over what changed. Posts that were deleted or trashed on the old site in the meantime stay in the new one, so remove them by hand.
 6. **Switch.** Set `HASH_DRIVER=wordpress`, register the `RedirectMissingPages` middleware or export the redirects for the web server, point the DNS at the new application, and keep the old site and its database as a backup. With the middleware, the `hits` column of `redirects` shows which old URLs are still requested, and `php artisan wp:password-stats` shows how many users still have an old hash.
+
+## Versioning
+
+The package follows [Semantic Versioning](https://semver.org/). The public API is:
+
+- the Artisan commands and their options
+- the configuration keys in `config/wp-migrator.php`
+- the `WpMigrator` facade and the interfaces it registers: mappers, shortcode handlers and the URL resolver
+- the models, their tables and columns, and the DTOs mappers receive
+- the Blade components `<x-wp-blocks>` and `<x-wp-seo>`, the block view names and the variables they receive
+- the `wordpress` hashing driver and the `RedirectMissingPages` middleware
+
+Everything else, such as the importers, readers and the theme scanner, is internal and may change in a minor version. So may the wording of the import report and the migration plan.
 
 ## Development
 
