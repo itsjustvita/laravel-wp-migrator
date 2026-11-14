@@ -59,47 +59,19 @@ class ExcludedUsers
             return $this->resolved = ['ids' => [], 'unmatched' => []];
         }
 
-        $numbers = [];
-        $names = [];
-
-        foreach ($entries as $entry) {
-            if (is_int($entry) || ctype_digit($entry)) {
-                $numbers[] = (int) $entry;
-            }
-
-            if (is_string($entry)) {
-                $names[] = $entry;
-            }
-        }
-
-        $connection = $this->db->connection();
-
-        $rows = $this->db->table('users')
-            ->where(function (Builder $query) use ($numbers, $names, $connection): void {
-                $query->whereIn('ID', $numbers)
-                    ->orWhereIn($connection->raw('LOWER(user_login)'), $names)
-                    ->orWhereIn($connection->raw('LOWER(user_email)'), $names);
-            })
-            ->orderBy('ID')
-            ->get(['ID', 'user_login', 'user_email']);
-
         $ids = [];
         $unmatched = [];
 
+        // One query per entry, and every row it returns is left out: the
+        // database alone decides what matches, under its own collation.
         foreach ($entries as $entry) {
-            $matched = false;
+            $found = $this->matching($entry);
 
-            foreach ($rows as $row) {
-                $byId = (is_int($entry) || ctype_digit($entry)) && (int) $row->ID === (int) $entry;
-                $byName = in_array($entry, [mb_strtolower((string) $row->user_login), mb_strtolower((string) $row->user_email)], true);
-
-                if ($byId || $byName) {
-                    $ids[(int) $row->ID] = true;
-                    $matched = true;
-                }
+            foreach ($found as $id) {
+                $ids[$id] = true;
             }
 
-            if (! $matched) {
+            if ($found === []) {
                 $unmatched[] = (string) $entry;
             }
         }
@@ -108,6 +80,30 @@ class ExcludedUsers
         sort($ids);
 
         return $this->resolved = ['ids' => $ids, 'unmatched' => $unmatched];
+    }
+
+    /**
+     * The users an entry names: an integer by ID, a string by login or email
+     * address, and a string of digits by ID as well.
+     *
+     * @return list<int>
+     */
+    private function matching(int|string $entry): array
+    {
+        $connection = $this->db->connection();
+
+        $query = $this->db->table('users')->where(function (Builder $query) use ($entry, $connection): void {
+            if (is_int($entry) || ctype_digit($entry)) {
+                $query->orWhere('ID', (int) $entry);
+            }
+
+            if (is_string($entry)) {
+                $query->orWhere($connection->raw('LOWER(user_login)'), $entry)
+                    ->orWhere($connection->raw('LOWER(user_email)'), $entry);
+            }
+        });
+
+        return array_values(array_map(intval(...), $query->pluck('ID')->all()));
     }
 
     /**

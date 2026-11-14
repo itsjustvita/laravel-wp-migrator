@@ -45,6 +45,10 @@ it('tries a string of digits as an ID, a login and an email address', function (
 
     config()->set('wp-migrator.users.excluded', [$numeric.'st-admin', '12345']);
     expect(app(ExcludedUsers::class)->unmatched())->toBe([$numeric.'st-admin']);
+
+    $lookalike = $site->user(['user_login' => (string) $byId]);
+    config()->set('wp-migrator.users.excluded', [(string) $byId]);
+    expect(app(ExcludedUsers::class)->ids())->toBe([$byId, $lookalike]);
 });
 
 it('names the entries that match no user', function () {
