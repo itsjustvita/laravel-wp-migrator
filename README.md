@@ -6,7 +6,7 @@ Move a WP site's content into a clean Laravel application without losing data, U
 
 The package migrates posts, pages, custom post types, media, taxonomies, menus, users and comments into its own schema, parses block and classic content into a renderable structure, imports SEO meta and custom fields, keeps old URLs alive through redirects, and lets existing users keep their passwords. It does not convert theme or plugin code. Instead, it produces an inventory of the theme and a migration plan for rebuilding the frontend in Blade.
 
-> **Status:** 0.1, ready for trial migrations. The API may still change before 1.0. The theme inventory and migration plan described below are not available yet. See the [changelog](CHANGELOG.md).
+> **Status:** ready for trial migrations. The API may still change before 1.0. See the [changelog](CHANGELOG.md).
 
 ## Requirements
 
@@ -63,6 +63,28 @@ php artisan wp:import --type=event --since=2026-10-01
 Imports are idempotent. Unchanged rows are skipped, changed rows are updated, and an aborted run can simply be started again. A post that refers to a post imported later in the same run is mapped once more at the end of the run. Whatever still cannot be resolved is mapped again on the next run. Every run writes a report to `storage/logs/wp-migrator-<timestamp>.md`.
 
 Media files are only copied when their extension is listed in `media.allowed_extensions`. Files a web server could execute, such as `.php`, are never copied, also not behind a second extension like `shell.php.jpg`: hacked sites often hide a backdoor in their uploads. SVG and HTML files can run script in the browser and are left out by default.
+
+### Migration plan
+
+The theme is not converted, it is read. `wp:inventory` scans the theme and the source database and writes a plan for rebuilding the frontend in Blade:
+
+```bash
+php artisan wp:inventory
+php artisan wp:inventory --theme=/path/to/wp-content/themes/acme --child=/path/to/wp-content/themes/acme-child
+php artisan wp:inventory --output=docs/plan.md --force
+```
+
+Without `--theme` it looks for the active theme, and its parent if it is a child theme, in the `themes` directory next to `source.uploads_path`. The plan goes to `docs/wp-migration-plan.md`, and an existing plan is only replaced with `--force`, since you may have ticked off items in it.
+
+The plan is a Markdown checklist for whoever builds the new frontend:
+
+- routes and views for the front page, every post type and its archive, pages with their own template, page templates with the posts that use them, and the category, tag, author and custom taxonomy archives, following the URL patterns in the configuration
+- components for headers, footers, sidebars and template parts, and the menu locations with the menus assigned to them
+- shortcodes and blocks that have no handler or view yet, with how often and where the content uses them
+- active plugins, sorted into those the import covers, those that need a replacement and those that are not needed in Laravel
+- scripts and styles to move to Vite, the theme features, and the content that is not migrated
+
+The theme is never run. PHP files are parsed, and only values written literally in the code are read, so a `register_post_type($type)` with a computed name is listed at the end of the plan to check by hand. When the source database cannot be read, the plan is written from the theme alone.
 
 ### Content
 
@@ -256,6 +278,15 @@ class EventMapper implements PostMapper
     }
 }
 ```
+
+## Migrating a site, step by step
+
+1. **Prepare.** Get a copy of the WP database and the `wp-content/uploads` directory, ideally with the theme next to it in `wp-content/themes`. Import the dump into a database the new application can read, add the connection, set `source.uploads_path`, and run `php artisan wp:check`. It shows what the site contains and which content the package does not migrate.
+2. **Plan.** Run `php artisan wp:inventory` and read `docs/wp-migration-plan.md`. Decide on the URL patterns in the `urls` section of the configuration now: links in the content, menu items and redirects are built from them.
+3. **Import.** Run `php artisan wp:import --dry-run`, read the report in `storage/logs`, then run `php artisan wp:import`. The report lists unknown shortcodes, blocks without a view and links it could not resolve.
+4. **Build the frontend.** Work through the plan: routes, views, components, shortcode handlers and block views. Run `php artisan wp:import --force` after changing handlers, mappers or URL patterns, so unchanged rows are mapped again.
+5. **Import the changes.** Shortly before going live, take a fresh copy of the database and the uploads and run `php artisan wp:import` again. It only brings over what changed. Posts that were deleted or trashed on the old site in the meantime stay in the new one, so remove them by hand.
+6. **Switch.** Set `HASH_DRIVER=wordpress`, register the `RedirectMissingPages` middleware or export the redirects for the web server, point the DNS at the new application, and keep the old site and its database as a backup. With the middleware, the `hits` column of `redirects` shows which old URLs are still requested, and `php artisan wp:password-stats` shows how many users still have an old hash.
 
 ## Development
 

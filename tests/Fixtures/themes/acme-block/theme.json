@@ -1,0 +1,10 @@
+{
+    "version": 3,
+    "customTemplates": [
+        { "name": "page-wide", "title": "Wide page", "postTypes": ["page"] }
+    ],
+    "templateParts": [
+        { "name": "header", "title": "Header", "area": "header" },
+        { "name": "footer", "title": "Footer", "area": "footer" }
+    ]
+}

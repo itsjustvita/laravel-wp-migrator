@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use ItsJustVita\WpMigrator\Import\ImportOptions;
 use ItsJustVita\WpMigrator\Import\ImportReport;
 use ItsJustVita\WpMigrator\Import\ImportRunner;
+use ItsJustVita\WpMigrator\Inventory\SiteInventory;
 use ItsJustVita\WpMigrator\Models\Comment;
 use ItsJustVita\WpMigrator\Models\Media;
 use ItsJustVita\WpMigrator\Models\Menu;
@@ -260,4 +261,18 @@ it('changes nothing when the site is imported a second time', function () {
     }
 
     expect($counts())->toBe($before);
+});
+
+it('reads the facts for the migration plan', function () {
+    $site = app(SiteInventory::class)->read();
+
+    expect($site->reachable)->toBeTrue()
+        ->and($site->stylesheet)->toBe('twentytwentyone')
+        ->and($site->plugins)->toContain('secure-custom-fields/secure-custom-fields.php')
+        ->and(array_keys($site->shortcodes))->toBe(['contact-form-7'])
+        ->and(array_keys($site->blocks))->toBe(['acme/hero'])
+        ->and($site->menus)->toBe(['primary' => ['menu' => 'Main Menu', 'items' => 5]])
+        ->and($site->pageTemplates)->toBe(['template-wide.php' => [['title' => 'About us', 'type' => 'page']]])
+        ->and($site->taxonomies)->toHaveKeys(['category', 'post_tag'])
+        ->and(array_map(fn ($finding) => $finding->key, $site->findings))->toBe(['elementor']);
 });

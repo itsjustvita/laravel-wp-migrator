@@ -1,0 +1,2 @@
+<?php
+// genre archive

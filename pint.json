@@ -4,6 +4,7 @@
         "declare_strict_types": true
     },
     "exclude": [
-        "tests/Fixtures/wordpress"
+        "tests/Fixtures/wordpress",
+        "tests/Fixtures/themes"
     ]
 }

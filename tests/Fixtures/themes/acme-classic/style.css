@@ -1,0 +1,10 @@
+/*
+Theme Name: Acme Classic
+Theme URI: https://example.net/acme
+Author: Acme Agency
+Version: 1.2.0
+Requires PHP: 8.1
+Text Domain: acme
+*/
+
+body { color: #222; }

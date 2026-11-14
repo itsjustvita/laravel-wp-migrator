@@ -2,6 +2,13 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses [Semantic Versioning](https://semver.org/). Until 1.0, minor versions may change the public API.
 
+## [Unreleased]
+
+### Added
+
+- `wp:inventory` scans the theme without running it and reads the source database, then writes a migration plan to `docs/wp-migration-plan.md`: a checklist of the routes, views and components to build, the shortcodes and blocks that need a handler or view, the plugins that need a replacement, the assets to move to Vite and the content that is not migrated.
+- The README walks through a migration step by step, from the first import to switching the DNS.
+
 ## [0.1.0] - 2026-11-08
 
 The first public version.
@@ -23,4 +30,5 @@ The first public version.
 - The theme inventory and the migration plan generator.
 - Content of page builders, WooCommerce, multilingual plugins and multisite installations is detected and reported, but not migrated.
 
+[Unreleased]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/itsjustvita/laravel-wp-migrator/releases/tag/v0.1.0
