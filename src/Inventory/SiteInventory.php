@@ -11,6 +11,7 @@ use ItsJustVita\WpMigrator\Content\Blocks\BlockRenderer;
 use ItsJustVita\WpMigrator\Content\Shortcodes\ShortcodeProcessor;
 use ItsJustVita\WpMigrator\Detection\Finding;
 use ItsJustVita\WpMigrator\Detection\UnsupportedContentDetector;
+use ItsJustVita\WpMigrator\Source\ExcludedUsers;
 use ItsJustVita\WpMigrator\Source\Readers\MenuReader;
 use ItsJustVita\WpMigrator\Source\SourceStats;
 use ItsJustVita\WpMigrator\Source\WpDatabase;
@@ -37,6 +38,7 @@ class SiteInventory
         private readonly BlockParser $parser,
         private readonly BlockRenderer $renderer,
         private readonly WpMigrator $registry,
+        private readonly ExcludedUsers $excluded,
     ) {}
 
     public function read(): SiteFacts
@@ -61,6 +63,9 @@ class SiteInventory
                 menus: $this->menus(),
                 widgets: $this->widgets(),
                 findings: array_values(array_filter($this->detector->findings(), fn (Finding $finding): bool => $finding->detected)),
+                userCount: $this->stats->userCount(),
+                administrators: $this->administrators(),
+                queryVars: $this->queryVars(),
             );
         } catch (Throwable $exception) {
             return SiteFacts::unreachable($exception->getMessage());
@@ -212,6 +217,58 @@ class SiteInventory
         }
 
         return $widgets;
+    }
+
+    /**
+     * @return list<array{login: string, registered: string|null, excluded: bool}>
+     */
+    private function administrators(): array
+    {
+        $excluded = $this->excluded->ids();
+
+        return array_map(fn (array $user): array => [
+            'login' => $user['login'],
+            'registered' => $user['registered'],
+            'excluded' => in_array($user['id'], $excluded, true),
+        ], $this->stats->administrators());
+    }
+
+    /**
+     * The query variables the rewrite rules lead to, and the post types they
+     * name. A post type or taxonomy without one had no pages of its own.
+     *
+     * @return list<string>|null
+     */
+    private function queryVars(): ?array
+    {
+        $rules = $this->decodedOption('rewrite_rules');
+
+        if ($rules === []) {
+            return null;
+        }
+
+        $vars = [];
+
+        foreach ($rules as $target) {
+            if (! is_string($target)) {
+                continue;
+            }
+
+            parse_str((string) parse_url($target, PHP_URL_QUERY), $query);
+
+            foreach ($query as $name => $value) {
+                $vars[(string) $name] = true;
+
+                if ($name === 'post_type' && is_string($value)) {
+                    $vars[$value] = true;
+                }
+            }
+        }
+
+        $vars = array_keys($vars);
+        sort($vars);
+
+        return array_map(strval(...), $vars);
     }
 
     /**

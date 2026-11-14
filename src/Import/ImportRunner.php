@@ -28,6 +28,7 @@ use ItsJustVita\WpMigrator\Models\Post;
 use ItsJustVita\WpMigrator\Models\Redirect;
 use ItsJustVita\WpMigrator\Models\Term;
 use ItsJustVita\WpMigrator\Redirects\RedirectImporter;
+use ItsJustVita\WpMigrator\Source\ExcludedUsers;
 use ItsJustVita\WpMigrator\WpMigrator;
 
 /**
@@ -72,6 +73,12 @@ class ImportRunner
             $report->note('Forced: unchanged rows were mapped again');
         }
 
+        $excludedUsers = $this->container->make(ExcludedUsers::class)->ids();
+
+        if ($excludedUsers !== []) {
+            $report->note(sprintf('Left out by users.excluded: %s %s', count($excludedUsers) === 1 ? 'user' : 'users', implode(', ', $excludedUsers)));
+        }
+
         $transactions = $options->dryRun ? $this->beginDryRun() : [];
 
         try {
@@ -83,7 +90,7 @@ class ImportRunner
                 }
 
                 $progress->start($importer->name(), $importer->count($options));
-                $importer->run($options, new ImportContext($this->map, $report, $importer->name(), $options->dryRun), $progress);
+                $importer->run($options, new ImportContext($this->map, $report, $importer->name(), $options->dryRun, $excludedUsers), $progress);
                 $progress->finish();
             }
         } finally {

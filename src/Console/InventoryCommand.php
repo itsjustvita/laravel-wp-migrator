@@ -67,7 +67,7 @@ class InventoryCommand extends Command
         }
 
         $files->ensureDirectoryExists(dirname($output));
-        $files->put($output, $plan->render($theme, $site));
+        $files->put($output, $plan->render($theme, $site, null, $this->installedPlugins($themePath, $files)));
 
         foreach ($theme->warnings as $warning) {
             $this->components->warn($warning);
@@ -126,6 +126,38 @@ class InventoryCommand extends Command
         $child = dirname($theme).'/'.$stylesheet;
 
         return $files->isDirectory($child) ? $child : null;
+    }
+
+    /**
+     * The plugins in the plugins directory next to the themes directory.
+     *
+     * @return list<string>
+     */
+    private function installedPlugins(string $theme, Filesystem $files): array
+    {
+        $themes = dirname(rtrim($theme, '/\\'));
+        $directory = dirname($themes).'/plugins';
+
+        if (basename($themes) !== 'themes' || ! $files->isDirectory($directory)) {
+            return [];
+        }
+
+        $plugins = [];
+
+        // Both skip hidden entries.
+        foreach ($files->directories($directory) as $path) {
+            $plugins[] = basename($path).'/'.basename($path).'.php';
+        }
+
+        foreach ($files->files($directory) as $file) {
+            if ($file->getExtension() === 'php' && $file->getFilename() !== 'index.php') {
+                $plugins[] = $file->getFilename();
+            }
+        }
+
+        sort($plugins);
+
+        return $plugins;
     }
 
     /**

@@ -147,3 +147,40 @@ it('reports a source database it cannot read', function () {
         ->and($facts->error)->toContain('wordpress.sqlite')
         ->and($facts->postCounts)->toBe([]);
 });
+
+it('reads the query variables of the rewrite rules', function () {
+    $this->source()->option('rewrite_rules', serialize([
+        'veranstaltungen/([^/]+)/?$' => 'index.php?event=$matches[1]',
+        'veranstaltungen/?$' => 'index.php?post_type=event',
+        '(.?.+?)(?:/([0-9]+))?/?$' => 'index.php?pagename=$matches[1]&page=$matches[2]',
+        'genre/(.+?)/?$' => 'index.php?genre=$matches[1]',
+        'books/?$' => 'index.php?post_type=book',
+        'broken' => ['not', 'a', 'string'],
+    ]));
+
+    expect(readSite()->queryVars)->toBe(['book', 'event', 'genre', 'page', 'pagename', 'post_type']);
+});
+
+it('has no query variables without pretty permalinks', function () {
+    $this->source()->option('rewrite_rules', '');
+
+    expect(readSite()->queryVars)->toBeNull();
+});
+
+it('reads the users and administrators, marking excluded ones', function () {
+    $site = $this->source();
+    $owner = $site->user(['user_login' => 'owner', 'user_registered' => '2024-02-01 10:00:00']);
+    $site->userMeta($owner, 'wp_capabilities', serialize(['administrator' => true]));
+    $intruder = $site->user(['user_login' => 'intruder', 'user_registered' => '2026-05-04 03:12:00']);
+    $site->userMeta($intruder, 'wp_capabilities', serialize(['administrator' => true]));
+    $site->user(['user_login' => 'reader']);
+    config()->set('wp-migrator.users.excluded', ['intruder']);
+
+    $facts = readSite();
+
+    expect($facts->userCount)->toBe(3)
+        ->and($facts->administrators)->toBe([
+            ['login' => 'owner', 'registered' => '2024-02-01', 'excluded' => false],
+            ['login' => 'intruder', 'registered' => '2026-05-04', 'excluded' => true],
+        ]);
+});

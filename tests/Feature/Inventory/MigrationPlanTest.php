@@ -91,7 +91,7 @@ it('takes the blog index from home.php, not from archive.php', function () {
         new Template('archive.php', 'archive'),
         new Template('home.php', 'home'),
         new Template('single.php', 'single', 'post'),
-    ]]));
+    ]]), planSite(['postCounts' => ['post' => ['publish' => 3]]]));
     $withFrontPage = renderPlan(planTheme(['templates' => [
         new Template('home.php', 'home'),
         new Template('front-page.php', 'front-page'),
@@ -140,7 +140,7 @@ it('names the archive after the post type when its pattern has no prefix', funct
 it('asks for a URL pattern when a post type has none', function () {
     config()->set('wp-migrator.urls.patterns', ['page' => '/{path}', 'post' => '/news/{year}/{slug}']);
 
-    expect(renderPlan(planTheme(['postTypes' => [new PostTypeDefinition('book', null, true, true, false, null, [], 'functions.php')]])))
+    expect(renderPlan(planTheme(['postTypes' => [new PostTypeDefinition('book', null, true, true, false, null, [], 'functions.php')]]), planSite(['postCounts' => ['post' => ['publish' => 3]]])))
         ->toContain('- [ ] **Book** (`book`): no URL pattern; add one to `urls.patterns` with the view `resources/views/books/show.blade.php`, from `index.php`. Archive: route `/books` with the view')
         ->toContain('Archive: route `/news` with the view `resources/views/posts/index.blade.php`');
 });
@@ -302,10 +302,10 @@ it('tells how to bring over the assets', function () {
 });
 
 it('explains the theme features and passes on the scan warnings', function () {
-    $plan = renderPlan(planTheme(['features' => ['post-thumbnails', 'html5'], 'warnings' => ['Could not read inc/broken.php.']]));
+    $plan = renderPlan(planTheme(['features' => ['post-thumbnails', 'html5', 'automatic-feed-links'], 'warnings' => ['Could not read inc/broken.php.']]));
 
     expect($plan)
-        ->toContain("## Theme features\n\n- `post-thumbnails`: Featured images are imported as `posts.featured_media_id`.\n- `html5`: Check whether the new frontend needs it.")
+        ->toContain("## Theme features\n\n- `post-thumbnails`: Featured images are imported as `posts.featured_media_id`.\n- `html5`: WP printed HTML5 markup for forms, galleries and captions; nothing to do.\n- `automatic-feed-links`: Check whether the new frontend needs it.")
         ->toContain("Check these by hand:\n\n- Could not read inc/broken.php.");
 });
 
@@ -397,4 +397,107 @@ it('gives specific pages and posts their own views', function () {
     expect($plan)
         ->toContain('- [ ] **Page "about"**: the page at `/about` gets its own view `resources/views/pages/about.blade.php`, from `page-about.php`.')
         ->toContain('- [ ] **Event "launch"**: the post at `/event/launch` gets its own view `resources/views/events/launch.blade.php`, from `single-event-launch.php`.');
+});
+
+it('asks to review the administrators before the import', function () {
+    $plan = renderPlan(planTheme(), planSite(['userCount' => 40, 'administrators' => [
+        ['login' => 'owner', 'registered' => '2024-02-01', 'excluded' => false],
+        ['login' => 'intruder', 'registered' => '2026-05-04', 'excluded' => true],
+        ['login' => 'old', 'registered' => null, 'excluded' => false],
+    ]]));
+
+    expect($plan)->toContain("## Users\n\n- [ ] Before the import, check the 3 administrator accounts: `owner` (registered 2024-02-01), `intruder` (excluded), `old` (registered on an unknown date). A hacked site can hold an attacker's account, which would be imported with a working password; leave such accounts out with `users.excluded`. The site has 40 users in all.\n");
+});
+
+it('leaves out the users section without administrators or without the database', function () {
+    $one = ['login' => 'owner', 'registered' => '2024-02-01', 'excluded' => false];
+
+    expect(renderPlan(planTheme(), planSite(['userCount' => 1, 'administrators' => [$one]])))
+        ->toContain('check the 1 administrator account: `owner` (registered 2024-02-01).')
+        ->toContain('The site has 1 user in all.')
+        ->and(renderPlan(planTheme(), planSite()))->not->toContain('## Users')
+        ->and(renderPlan(planTheme(), new SiteFacts(false, 'down', administrators: [$one])))->not->toContain('## Users');
+});
+
+it('gives post types without pages no route', function () {
+    $plan = renderPlan(planTheme([
+        'postTypes' => [
+            new PostTypeDefinition('lead', 'Leads', false, false, false, null, [], 'inc/leads.php'),
+            new PostTypeDefinition('book', 'Books', true, false, false, null, [], 'functions.php'),
+        ],
+    ]), planSite([
+        'queryVars' => ['lead', 'book', 'gig', 'pagename'],
+        'postCounts' => ['lead' => ['publish' => 389, 'trash' => 13], 'form' => ['publish' => 1], 'gig' => ['publish' => 2], 'book' => ['publish' => 1]],
+    ]));
+
+    expect($plan)
+        ->toContain("## Data without pages\n\n- [ ] **Leads** (`lead`, 402 posts): the theme registers it as not public in `inc/leads.php`, so its posts had no pages. If it holds data rather than content, such as form entries or settings, add it to `import.excluded_post_types` before the import; such data often includes personal data. Otherwise import it, but give it no route.\n- [ ] **Form** (`form`, 1 post): the site had no URLs for it, so it probably holds the data of a plugin.")
+        ->not->toContain('route `/lead/{slug}`')
+        ->not->toContain('route `/form/{slug}`')
+        ->toContain('- [ ] **Gig** (`gig`, 2 published): route `/gig/{slug}`')
+        ->toContain('- [ ] **Books** (`book`, 1 published): route `/book/{slug}`');
+});
+
+it('gives every post type a route without pretty permalinks', function () {
+    expect(renderPlan(planTheme(), planSite(['postCounts' => ['form' => ['publish' => 1]]])))
+        ->toContain('- [ ] **Form** (`form`, 1 published): route `/form/{slug}`')
+        ->not->toContain('## Data without pages');
+});
+
+it('leaves out the blog when the site has no posts', function () {
+    expect(renderPlan(planTheme(), planSite(['postCounts' => ['page' => ['publish' => 2]]])))
+        ->not->toContain('**Posts**')
+        ->toContain('**Pages**')
+        ->and(renderPlan(planTheme(), SiteFacts::unreachable('down')))->toContain('**Posts** (`post`)');
+});
+
+it('lists archives of plugin taxonomies only when the site had URLs for them', function () {
+    $plan = renderPlan(planTheme([
+        'taxonomies' => [new TaxonomyDefinition('genre', 'Genres', ['book'], true, null, 'functions.php')],
+    ]), planSite([
+        'queryVars' => ['category_name', 'brand'],
+        'taxonomies' => ['category' => 1, 'genre' => 1, 'brand' => 2, 'product_visibility' => 9],
+    ]));
+
+    expect($plan)
+        ->toContain('**Category archive**')
+        ->toContain('**Genre archive**')
+        ->toContain('**Brand archive**')
+        ->not->toContain('Product Visibility');
+});
+
+it('lists many blocks of one namespace as one item', function () {
+    $plan = renderPlan(planTheme(), planSite(['blocks' => [
+        'shop/cart' => ['count' => 1, 'post_ids' => [71]],
+        'shop/checkout' => ['count' => 2, 'post_ids' => [72, 71]],
+        'shop/price' => ['count' => 1, 'post_ids' => [72]],
+        'shop/button' => ['count' => 1, 'post_ids' => [9]],
+        'other/a' => ['count' => 1, 'post_ids' => [3]],
+        'other/b' => ['count' => 1, 'post_ids' => [3]],
+        'other/c' => ['count' => 1, 'post_ids' => [3]],
+        'core/post-title' => ['count' => 1, 'post_ids' => [5]],
+        'core/query' => ['count' => 1, 'post_ids' => [5]],
+        'core/latest-posts' => ['count' => 1, 'post_ids' => [5]],
+        'core/page-list' => ['count' => 1, 'post_ids' => [5]],
+    ]]));
+
+    expect($plan)
+        ->toContain('- [ ] 4 blocks from `shop/`, used 5 times, for example in the posts with the IDs 9, 71, 72: `cart`, `checkout`, `price`, `button`. Create a view for each in `resources/views/vendor/wp-migrator/blocks/shop/`, or they render their stored HTML.')
+        ->toContain('- [ ] Block `other/a`:')
+        ->toContain('- [ ] Block `other/c`:')
+        ->toContain('- [ ] Block `core/page-list`:')
+        ->not->toContain('Block `shop/');
+});
+
+it('lists the installed plugins when none is active', function () {
+    $installed = ['contact-form-7/contact-form-7.php', 'mystery/mystery.php'];
+
+    expect(app(MigrationPlan::class)->render(planTheme(), planSite(), CarbonImmutable::parse('2026-11-14'), $installed))
+        ->toContain("## Plugins\n\nNo plugins are active. These are installed; they may have been switched off, so check which of them the site used:\n\n- [ ] **Contact Form 7** (`contact-form-7/contact-form-7.php`), needs a replacement:")
+        ->toContain('- [ ] **mystery** (`mystery/mystery.php`), unknown:')
+        ->and(app(MigrationPlan::class)->render(planTheme(), SiteFacts::unreachable('down'), null, $installed))
+        ->toContain("## Plugins\n\nThe active plugins could not be read. These are installed;")
+        ->and(app(MigrationPlan::class)->render(planTheme(), planSite(['plugins' => ['hello.php']]), null, $installed))
+        ->toContain("## Plugins\n\n- [ ] **hello** (`hello.php`), unknown:")
+        ->not->toContain('These are installed');
 });

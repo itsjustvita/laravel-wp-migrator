@@ -24,6 +24,8 @@ class MigrationPlan
 {
     private const array FEATURES = [
         'post-thumbnails' => 'Featured images are imported as `posts.featured_media_id`.',
+        'title-tag' => 'WP printed the `<title>`; `<x-wp-seo>` renders it from the imported SEO title.',
+        'html5' => 'WP printed HTML5 markup for forms, galleries and captions; nothing to do.',
         'custom-logo' => 'The logo is a theme setting and is not imported; add it to the layout.',
         'custom-header' => 'The header image is a theme setting and is not imported.',
         'custom-background' => 'The background is a theme setting and is not imported.',
@@ -41,6 +43,12 @@ class MigrationPlan
 
     private const int EXAMPLES = 5;
 
+    /** A namespace with at least this many unknown blocks is listed as one item. */
+    private const int BLOCK_GROUP = 4;
+
+    /** @var list<string> */
+    private array $installedPlugins = [];
+
     private ThemeInventory $theme;
 
     private SiteFacts $site;
@@ -50,15 +58,21 @@ class MigrationPlan
         private readonly PluginCatalog $plugins,
     ) {}
 
-    public function render(ThemeInventory $theme, SiteFacts $site, ?CarbonImmutable $now = null): string
+    /**
+     * @param  list<string>  $installedPlugins  plugin files found in the plugins directory
+     */
+    public function render(ThemeInventory $theme, SiteFacts $site, ?CarbonImmutable $now = null, array $installedPlugins = []): string
     {
         $this->theme = $theme;
         $this->site = $site;
+        $this->installedPlugins = $installedPlugins;
 
         $sections = [
             $this->intro($now ?? CarbonImmutable::now()),
             $this->overview(),
+            $this->users(),
             $this->routes(),
+            $this->dataWithoutPages(),
             $this->components(),
             $this->renderers(),
             $this->pluginSection(),
@@ -146,7 +160,9 @@ class MigrationPlan
         $items[] = sprintf('- [ ] **Front page**: route `/` with the view `resources/views/home.blade.php`%s.', $this->from($front));
 
         foreach ($this->postTypes() as $type) {
-            $items[] = $this->postTypeItem($type);
+            if ($this->hasPages($type) && ! ($type === 'post' && $this->site->reachable && ! isset($this->site->postCounts['post']))) {
+                $items[] = $this->postTypeItem($type);
+            }
         }
 
         foreach ($this->theme->templates as $template) {
@@ -194,11 +210,7 @@ class MigrationPlan
     {
         $definition = $this->definition($type);
         $plural = Str::plural(str_replace('_', '-', $type));
-        $label = $definition->label ?? match ($type) {
-            'post' => 'Posts',
-            'page' => 'Pages',
-            default => Str::headline($type),
-        };
+        $label = $this->label($type);
 
         $single = $this->singleTemplate($type);
         $route = $this->postRoute($type);
@@ -230,6 +242,82 @@ class MigrationPlan
         }
 
         return $item;
+    }
+
+    private function label(string $type): string
+    {
+        return $this->definition($type)->label ?? match ($type) {
+            'post' => 'Posts',
+            'page' => 'Pages',
+            default => Str::headline($type),
+        };
+    }
+
+    /**
+     * Whether the posts of a type had pages of their own: the theme did not
+     * register it as not public, and the rewrite rules lead to it.
+     */
+    private function hasPages(string $type): bool
+    {
+        if (in_array($type, ['page', 'post'], true)) {
+            return true;
+        }
+
+        $definition = $this->definition($type);
+
+        if ($definition !== null) {
+            return $definition->public !== false;
+        }
+
+        return $this->site->queryVars === null || in_array($type, $this->site->queryVars, true);
+    }
+
+    private function users(): string
+    {
+        if (! $this->site->reachable || $this->site->administrators === []) {
+            return '';
+        }
+
+        $count = count($this->site->administrators);
+        $accounts = array_map(
+            fn (array $user): string => sprintf('`%s` (%s)', $user['login'], $user['excluded'] ? 'excluded' : 'registered '.($user['registered'] ?? 'on an unknown date')),
+            $this->site->administrators,
+        );
+
+        return "## Users\n\n".sprintf(
+            '- [ ] Before the import, check the %d administrator %s: %s. A hacked site can hold an attacker\'s account, which would be imported with a working password; leave such accounts out with `users.excluded`. The site has %d %s in all.',
+            $count,
+            $count === 1 ? 'account' : 'accounts',
+            implode(', ', $accounts),
+            $this->site->userCount,
+            $this->site->userCount === 1 ? 'user' : 'users',
+        );
+    }
+
+    private function dataWithoutPages(): string
+    {
+        $items = [];
+
+        foreach ($this->postTypes() as $type) {
+            if ($this->hasPages($type)) {
+                continue;
+            }
+
+            $definition = $this->definition($type);
+            $total = array_sum($this->site->postCounts[$type] ?? []);
+
+            $items[] = sprintf(
+                '- [ ] **%s** (`%s`%s): %s. If it holds data rather than content, such as form entries or settings, add it to `import.excluded_post_types` before the import; such data often includes personal data. Otherwise import it, but give it no route.',
+                $this->label($type),
+                $type,
+                $total === 0 ? '' : sprintf(', %d %s', $total, $total === 1 ? 'post' : 'posts'),
+                $definition !== null
+                    ? sprintf('the theme registers it as not public in `%s`, so its posts had no pages', $definition->file)
+                    : 'the site had no URLs for it, so it probably holds the data of a plugin',
+            );
+        }
+
+        return $items === [] ? '' : "## Data without pages\n\n".implode("\n", $items);
     }
 
     private function specificItem(Template $template): string
@@ -325,6 +413,11 @@ class MigrationPlan
                 continue;
             }
 
+            // A taxonomy of a plugin that had no archive URLs on the site.
+            if (! $builtIn && ! $this->themeTaxonomy($taxonomy) && $this->site->queryVars !== null && ! in_array($taxonomy, $this->site->queryVars, true)) {
+                continue;
+            }
+
             $plural = match ($taxonomy) {
                 'category' => 'categories',
                 'post_tag' => 'tags',
@@ -366,6 +459,17 @@ class MigrationPlan
         }
 
         return $items;
+    }
+
+    private function themeTaxonomy(string $taxonomy): bool
+    {
+        foreach ($this->theme->taxonomies as $definition) {
+            if ($definition->name === $taxonomy) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function routeWith(?string $pattern): string
@@ -489,8 +593,22 @@ class MigrationPlan
             );
         }
 
+        $byNamespace = [];
+
         foreach ($this->site->blocks as $name => $usage) {
             if (! isset($themeBlocks[$name])) {
+                $byNamespace[str_contains($name, '/') ? explode('/', $name)[0] : $name][$name] = $usage;
+            }
+        }
+
+        foreach ($byNamespace as $namespace => $blocks) {
+            if ($namespace !== 'core' && count($blocks) >= self::BLOCK_GROUP) {
+                $items[] = $this->blockGroupItem($namespace, $blocks);
+
+                continue;
+            }
+
+            foreach ($blocks as $name => $usage) {
                 $items[] = sprintf('- [ ] Block `%s`: %s Create the view `%s`, or it renders its stored HTML.', $name, $this->usage($usage), $this->blockView($name));
             }
         }
@@ -500,6 +618,28 @@ class MigrationPlan
         }
 
         return "## Shortcodes and blocks\n\nPublish the block views first with `php artisan vendor:publish --tag=wp-migrator-views`.\n\n".implode("\n", $items);
+    }
+
+    /**
+     * @param  array<string, array{count: int, post_ids: list<int>}>  $blocks
+     */
+    private function blockGroupItem(string $namespace, array $blocks): string
+    {
+        $ids = array_values(array_unique(array_merge(...array_column($blocks, 'post_ids'))));
+        sort($ids);
+        $ids = array_slice($ids, 0, self::EXAMPLES);
+
+        return sprintf(
+            '- [ ] %d blocks from `%s/`, used %d times, for example in the %s with the %s %s: %s. Create a view for each in `resources/views/vendor/wp-migrator/blocks/%s/`, or they render their stored HTML.',
+            count($blocks),
+            $namespace,
+            array_sum(array_column($blocks, 'count')),
+            count($ids) === 1 ? 'post' : 'posts',
+            count($ids) === 1 ? 'ID' : 'IDs',
+            implode(', ', $ids),
+            $this->codeList(array_map(fn (string $name): string => substr($name, strlen($namespace) + 1), array_keys($blocks))),
+            $namespace,
+        );
     }
 
     private function handlerAdvice(string $tag): string
@@ -546,18 +686,28 @@ class MigrationPlan
 
     private function pluginSection(): string
     {
-        if (! $this->site->reachable) {
-            return "## Plugins\n\nThe active plugins could not be read.";
+        if (! $this->site->reachable || $this->site->plugins === []) {
+            $intro = $this->site->reachable ? 'No plugins are active.' : 'The active plugins could not be read.';
+
+            if ($this->installedPlugins === []) {
+                return "## Plugins\n\n".$intro;
+            }
+
+            return "## Plugins\n\n".$intro.' These are installed; they may have been switched off, so check which of them the site used:'."\n\n".$this->pluginList($this->installedPlugins);
         }
 
-        if ($this->site->plugins === []) {
-            return "## Plugins\n\nNo plugins are active.";
-        }
+        return "## Plugins\n\n".$this->pluginList($this->site->plugins);
+    }
 
+    /**
+     * @param  list<string>  $files
+     */
+    private function pluginList(array $files): string
+    {
         $work = [];
         $done = [];
 
-        foreach ($this->site->plugins as $file) {
+        foreach ($files as $file) {
             $plugin = $this->plugins->classify($file);
 
             if ($plugin->needsWork()) {
@@ -577,7 +727,7 @@ class MigrationPlan
             }
         }
 
-        return "## Plugins\n\n".implode("\n", [...$work, ...$done]);
+        return implode("\n", [...$work, ...$done]);
     }
 
     private function assets(): string

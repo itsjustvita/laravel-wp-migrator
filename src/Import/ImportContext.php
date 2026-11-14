@@ -20,11 +20,15 @@ class ImportContext
 
     private ?string $skipReason = null;
 
+    /**
+     * @param  list<int>  $excludedUsers  users left out by users.excluded; references to them resolve to null
+     */
     public function __construct(
         public readonly ImportMap $map,
         public readonly ImportReport $report,
         public readonly string $importer,
         public readonly bool $dryRun = false,
+        public readonly array $excludedUsers = [],
     ) {}
 
     public function startRow(): void
@@ -61,7 +65,7 @@ class ImportContext
      */
     public function resolve(SourceType $type, ?int $reference, int $sourceId, string $kind, ?string $targetClass = null): ?int
     {
-        if ($reference === null) {
+        if ($reference === null || ($type === SourceType::User && in_array($reference, $this->excludedUsers, true))) {
             return null;
         }
 

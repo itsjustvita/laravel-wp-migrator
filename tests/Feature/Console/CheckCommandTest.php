@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Artisan;
+use ItsJustVita\WpMigrator\Source\SourceStats;
+
 it('fails when the source connection cannot be opened', function () {
     config()->set('database.connections.wordpress', ['driver' => 'sqlite', 'database' => '/nonexistent/wordpress.sqlite']);
     app('db')->purge('wordpress');
@@ -44,6 +47,10 @@ it('prints counts per post type, taxonomy, users and media', function () {
         ->expectsOutputToContain('Users')
         ->expectsOutputToContain('Media')
         ->assertSuccessful();
+
+    Artisan::call('wp:check');
+
+    expect(Artisan::output())->not->toContain('Administrators');
 });
 
 it('warns about a missing uploads path without failing', function () {
@@ -91,4 +98,50 @@ it('lists unsupported content with affected post ids', function () {
         ->expectsOutputToContain("1 post (ID {$divi})")
         ->expectsOutputToContain('2 kinds of unsupported content found')
         ->assertSuccessful();
+});
+
+it('lists the administrators to review and marks excluded ones', function () {
+    $site = $this->source();
+    $site->option('home', 'https://old.example.com');
+    $owner = $site->user(['user_login' => 'owner', 'user_email' => 'owner@example.com', 'user_registered' => '2024-02-01 10:00:00']);
+    $site->userMeta($owner, 'wp_capabilities', serialize(['administrator' => true]));
+    $intruder = $site->user(['user_login' => 'intruder', 'user_email' => 'x@evil.example', 'user_registered' => '2026-05-04 03:12:00']);
+    $site->userMeta($intruder, 'wp_capabilities', serialize(['administrator' => true]));
+    $planted = $site->user(['user_login' => 'planted', 'user_email' => 'p@evil.example', 'user_registered' => '2025-05-05 00:00:00']);
+    $site->userMeta($planted, 'wp_capabilities', serialize(['administrator' => true]));
+    $editor = $site->user(['user_login' => 'writer']);
+    $site->userMeta($editor, 'wp_capabilities', serialize(['editor' => true]));
+    config()->set('wp-migrator.users.excluded', ['planted']);
+
+    expect(Artisan::call('wp:check'))->toBe(0);
+
+    $output = Artisan::output();
+
+    expect($output)
+        ->toMatch('/Administrators.*review before the import/')
+        ->toMatch('/owner \\(owner@example\.com\) \.+ registered 2024-02-01/')
+        ->toMatch('/intruder \\(x@evil\.example\) \.+ registered 2026-05-04/')
+        ->toMatch('/planted \\(p@evil\.example\) \.+ excluded/')
+        ->toContain("A hacked site can hold an attacker's account")
+        ->toContain('wp-migrator.users.excluded')
+        ->not->toContain('writer (')
+        ->not->toContain('2025-05-05');
+});
+
+it('reads the administrators with their registration date', function () {
+    $site = $this->source();
+    $owner = $site->user(['user_login' => 'owner', 'user_email' => 'owner@example.com', 'user_registered' => '2024-02-01 10:00:00']);
+    $site->userMeta($owner, 'wp_capabilities', serialize(['administrator' => true]));
+    $old = $site->user(['user_login' => 'old', 'user_registered' => '0000-00-00 00:00:00']);
+    $site->userMeta($old, 'wp_capabilities', serialize(['administrator' => true, 'editor' => true]));
+    $editor = $site->user(['user_login' => 'writer']);
+    $site->userMeta($editor, 'wp_capabilities', serialize(['editor' => true]));
+    $site->userMeta($editor, 'other_capabilities', serialize(['administrator' => true]));
+    $translator = $site->user(['user_login' => 'translator']);
+    $site->userMeta($translator, 'wp_capabilities', serialize(['translation_administrator' => true]));
+
+    expect(app(SourceStats::class)->administrators())->toBe([
+        ['id' => $owner, 'login' => 'owner', 'email' => 'owner@example.com', 'registered' => '2024-02-01'],
+        ['id' => $old, 'login' => 'old', 'email' => 'old@example.com', 'registered' => null],
+    ]);
 });

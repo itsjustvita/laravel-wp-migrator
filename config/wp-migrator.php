@@ -65,6 +65,10 @@ return [
             'wp_font_family', 'wp_font_face',
             'acf-field-group', 'acf-field', 'acf-post-type', 'acf-taxonomy', 'acf-ui-options-page',
             'scheduled-action',
+            // Data of common plugins: forms, page builder templates, cookie
+            // banners and shop orders.
+            'wpcf7_contact_form', 'elementor_library', 'rcb-cookie', 'rcb-banner-link', 'rcb-blocker',
+            'shop_order', 'shop_order_refund', 'shop_order_placehold', 'shop_coupon', 'product_variation',
         ],
 
         'excluded_taxonomies' => [
@@ -107,6 +111,13 @@ return [
         // address instead of creating a second account. Linked users are
         // never changed by the import.
         'link_existing_by_email' => true,
+
+        // Users to leave out, by ID, login or email address. A hacked site
+        // can hold an attacker's account, which would be imported with a
+        // working password; wp:check lists the administrators to review.
+        'excluded' => [
+            // 'intruder', 'someone@example.com', 10,
+        ],
     ],
 
     /*

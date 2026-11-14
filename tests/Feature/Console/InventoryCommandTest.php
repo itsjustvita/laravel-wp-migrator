@@ -167,6 +167,35 @@ it('never takes a path from the theme options', function () {
     File::deleteDirectory($root);
 });
 
+it('lists the plugins installed next to the themes when none is active', function () {
+    seedInventorySite($this->source());
+    $this->source()->option('active_plugins', serialize([]));
+    $root = sys_get_temp_dir().'/wp-migrator-site-'.uniqid();
+    File::copyDirectory(inventoryTheme('acme-classic'), $root.'/wp-content/themes/acme-classic');
+    File::ensureDirectoryExists($root.'/wp-content/plugins/contact-form-7');
+    File::ensureDirectoryExists($root.'/wp-content/plugins/.git');
+    file_put_contents($root.'/wp-content/plugins/hello.php', '<?php');
+    file_put_contents($root.'/wp-content/plugins/index.php', '<?php');
+    file_put_contents($root.'/wp-content/plugins/readme.txt', '');
+
+    $this->artisan('wp:inventory', ['--theme' => $root.'/wp-content/themes/acme-classic', '--output' => $this->plan])->assertSuccessful();
+
+    expect(file_get_contents($this->plan))
+        ->toContain('No plugins are active. These are installed;')
+        ->toContain('**Contact Form 7** (`contact-form-7/contact-form-7.php`)')
+        ->toContain('**hello** (`hello.php`)')
+        ->not->toContain('`.git')
+        ->not->toContain('index.php`), unknown')
+        ->not->toContain('readme');
+
+    File::moveDirectory($root.'/wp-content/themes', $root.'/wp-content/custom');
+    $this->artisan('wp:inventory', ['--theme' => $root.'/wp-content/custom/acme-classic', '--output' => $this->plan, '--force' => true])->assertSuccessful();
+
+    expect(file_get_contents($this->plan))->not->toContain('These are installed');
+
+    File::deleteDirectory($root);
+});
+
 it('asks for the theme when it cannot find it', function () {
     seedInventorySite($this->source());
 

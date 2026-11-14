@@ -7,6 +7,7 @@ namespace ItsJustVita\WpMigrator\Console;
 use Illuminate\Config\Repository;
 use Illuminate\Console\Command;
 use ItsJustVita\WpMigrator\Detection\UnsupportedContentDetector;
+use ItsJustVita\WpMigrator\Source\ExcludedUsers;
 use ItsJustVita\WpMigrator\Source\SourceStats;
 use ItsJustVita\WpMigrator\Source\WpDatabase;
 use Throwable;
@@ -26,6 +27,7 @@ class CheckCommand extends Command
         SourceStats $stats,
         UnsupportedContentDetector $detector,
         Repository $config,
+        ExcludedUsers $excluded,
     ): int {
         $this->newLine();
         $this->line('<options=bold> Source</>');
@@ -38,6 +40,7 @@ class CheckCommand extends Command
         $this->checkUploads($config, $siteUrl);
 
         $this->printCounts($stats);
+        $this->printAdministrators($stats, $excluded);
         $this->printFindings($detector);
 
         return self::SUCCESS;
@@ -161,6 +164,32 @@ class CheckCommand extends Command
 
         $this->components->twoColumnDetail('Users', (string) $stats->userCount());
         $this->components->twoColumnDetail('Media <fg=gray>(attachments)</>', (string) $stats->mediaCount());
+    }
+
+    private function printAdministrators(SourceStats $stats, ExcludedUsers $excluded): void
+    {
+        $administrators = $stats->administrators();
+
+        if ($administrators === []) {
+            return;
+        }
+
+        $this->newLine();
+        $this->line('<options=bold> Administrators</> <fg=gray>(review before the import)</>');
+
+        $left = $excluded->ids();
+
+        foreach ($administrators as $user) {
+            $this->components->twoColumnDetail(
+                sprintf('%s <fg=gray>(%s)</>', $user['login'], $user['email']),
+                in_array($user['id'], $left, true)
+                    ? '<fg=gray>excluded</>'
+                    : 'registered '.($user['registered'] ?? 'unknown'),
+            );
+        }
+
+        $this->line(' <fg=gray>A hacked site can hold an attacker\'s account, which would be imported with a working password.</>');
+        $this->line(' <fg=gray>Leave such accounts out with wp-migrator.users.excluded.</>');
     }
 
     private function printFindings(UnsupportedContentDetector $detector): void

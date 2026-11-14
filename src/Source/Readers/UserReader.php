@@ -44,7 +44,8 @@ class UserReader extends Reader
 
     private function query(UserFilter $filter): Builder
     {
-        return $this->db->table('users');
+        return $this->db->table('users')
+            ->when($filter->excludedIds !== [], fn (Builder $query) => $query->whereNotIn('ID', $filter->excludedIds));
     }
 
     private function toUser(stdClass $row, MetaBag $meta, string $capabilitiesKey): SourceUser

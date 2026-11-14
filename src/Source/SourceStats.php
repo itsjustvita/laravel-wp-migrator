@@ -71,6 +71,33 @@ class SourceStats
         return $this->db->table('users')->count();
     }
 
+    /**
+     * Users with the administrator role, oldest first. A hacked site can hold
+     * an attacker's account among them.
+     *
+     * @return list<array{id: int, login: string, email: string, registered: string|null}>
+     */
+    public function administrators(): array
+    {
+        $users = $this->db->tableName('users');
+        $meta = $this->db->tableName('usermeta');
+
+        $query = $this->db->table('users')
+            ->join($meta, $meta.'.user_id', '=', $users.'.ID')
+            ->where($meta.'.meta_key', $this->db->prefix().'capabilities');
+
+        $rows = Like::contains($query, $meta.'.meta_value', '"administrator"')
+            ->orderBy($users.'.ID')
+            ->get([$users.'.ID', $users.'.user_login', $users.'.user_email', $users.'.user_registered']);
+
+        return array_values($rows->map(fn (object $row): array => [
+            'id' => (int) $row->ID,
+            'login' => (string) $row->user_login,
+            'email' => (string) $row->user_email,
+            'registered' => is_string($row->user_registered) && ! str_starts_with($row->user_registered, '0000') ? substr($row->user_registered, 0, 10) : null,
+        ])->all());
+    }
+
     public function mediaCount(): int
     {
         return $this->db->table('posts')->where('post_type', 'attachment')->count();

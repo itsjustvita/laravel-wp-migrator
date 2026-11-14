@@ -20,6 +20,8 @@ it('classifies known plugins', function (string $file, string $status, string $n
     ['relevanssi/relevanssi.php', 'replace', 'Relevanssi', 'Laravel Scout'],
     ['user-role-editor/user-role-editor.php', 'replace', 'User Role Editor', 'roles'],
     ['elementor/elementor.php', 'unsupported', 'Elementor', 'rebuild'],
+    ['pro-elements/pro-elements.php', 'unsupported', 'PRO Elements', 'rebuild'],
+    ['mailin/sendinblue.php', 'replace', 'Brevo', 'API'],
     ['woocommerce/woocommerce.php', 'unsupported', 'WooCommerce', 'shop'],
     ['sitepress-multilingual-cms/sitepress.php', 'unsupported', 'WPML', 'languages'],
     ['wordfence/wordfence.php', 'obsolete', 'Wordfence Security', 'Laravel'],
