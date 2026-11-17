@@ -9,6 +9,7 @@ use ItsJustVita\WpMigrator\Content\Blocks\Block;
 use ItsJustVita\WpMigrator\Content\Blocks\BlockDepth;
 use ItsJustVita\WpMigrator\Content\Blocks\BlockParser;
 use ItsJustVita\WpMigrator\Content\Blocks\BlockRenderer;
+use ItsJustVita\WpMigrator\Content\Elementor\ElementorConverter;
 use ItsJustVita\WpMigrator\Content\Shortcodes\Shortcode;
 use ItsJustVita\WpMigrator\Content\Shortcodes\ShortcodeContext;
 use ItsJustVita\WpMigrator\Content\Shortcodes\ShortcodeProcessor;
@@ -31,6 +32,8 @@ use ItsJustVita\WpMigrator\WpMigrator;
  * rendered before it gets paragraphs, so their output counts as block-level
  * HTML. Block content already has its HTML, so it only gets URLs and
  * shortcodes, and references to reusable blocks are replaced by their content.
+ * Pages built with Elementor are converted from their Elementor data and
+ * then treated like block content.
  */
 class ContentTransformer
 {
@@ -61,6 +64,7 @@ class ContentTransformer
         private readonly WpMigrator $registry,
         private readonly WpDatabase $db,
         private readonly Repository $config,
+        private readonly ElementorConverter $elementor,
     ) {}
 
     /**
@@ -68,14 +72,18 @@ class ContentTransformer
      */
     public function transform(SourcePost $post, ImportContext $context): array
     {
-        if (trim($post->content) === '') {
-            return [];
-        }
+        $blocks = $this->elementorBlocks($post, $context);
 
-        $blocks = $this->parser->parse($post->content);
+        if ($blocks === null) {
+            if (trim($post->content) === '') {
+                return [];
+            }
 
-        if ($this->isClassicContent($blocks)) {
-            return $this->transformClassic($post->content, $post->id, $context);
+            $blocks = $this->parser->parse($post->content);
+
+            if ($this->isClassicContent($blocks)) {
+                return $this->transformClassic($post->content, $post->id, $context);
+            }
         }
 
         $blocks = BlockDepth::limit(
@@ -94,6 +102,31 @@ class ContentTransformer
         }
 
         return $blocks;
+    }
+
+    /**
+     * The blocks of a page built with Elementor, or null to use the content.
+     * Elementor keeps an HTML copy of the page in the content, which serves
+     * when its data cannot be read.
+     *
+     * @return list<Block>|null
+     */
+    private function elementorBlocks(SourcePost $post, ImportContext $context): ?array
+    {
+        if (! $this->config->boolean('wp-migrator.content.elementor', true) || ! ElementorConverter::builtWith($post->meta)) {
+            return null;
+        }
+
+        $blocks = $this->elementor->convert(
+            (string) $post->meta->get('_elementor_data'),
+            fn (string $message) => $context->warn($post->id, $message),
+        );
+
+        if ($blocks === null) {
+            $context->warn($post->id, 'The Elementor data could not be read; the HTML copy in the content was imported instead.');
+        }
+
+        return $blocks === [] ? null : $blocks;
     }
 
     /**

@@ -43,6 +43,7 @@ final readonly class SiteFacts
         public int $userCount = 0,
         public array $administrators = [],
         public ?array $queryVars = null,
+        public int $elementorPages = 0,
     ) {}
 
     public static function unreachable(string $error): self

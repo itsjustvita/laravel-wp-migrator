@@ -2,6 +2,18 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses [Semantic Versioning](https://semver.org/). Since 1.0, breaking changes to the public API come only with a new major version; the README lists what the public API covers.
 
+## [Unreleased]
+
+### Added
+
+- Pages built with Elementor are converted from their Elementor data into blocks. Containers, sections and columns keep the layout, and the common widgets become core blocks: heading, text, image, button, video, divider, spacer, icon list, HTML, shortcode, image gallery, icon box, image box, testimonial, accordion, toggle and tabs. Global widgets and templates are replaced by their content. Other widgets become `elementor/<widget>` blocks with all their settings, ready for a view. Set `content.elementor` to `false` for the previous behaviour.
+- A view for `core/details`.
+- `wp:check`, the report and the migration plan list templates of the Elementor theme builder, such as headers, footers and popups, as content that is not migrated. The migration plan says how many pages are converted from Elementor and lists their widgets without a view.
+
+### Changed
+
+- Elementor pages are no longer reported as content that is not migrated while `content.elementor` is on. Elementor counts as covered by the import; Elementor Pro and PRO Elements as needing a replacement for their theme builder, popups and forms.
+
 ## [1.1.0] - 2026-11-14
 
 Changes from the first trial migration of a real site.
@@ -48,6 +60,7 @@ The first public version.
 - The theme inventory and the migration plan generator.
 - Content of page builders, WooCommerce, multilingual plugins and multisite installations is detected and reported, but not migrated.
 
+[Unreleased]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/itsjustvita/laravel-wp-migrator/releases/tag/v0.1.0

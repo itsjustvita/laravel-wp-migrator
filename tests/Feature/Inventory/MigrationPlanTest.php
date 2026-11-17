@@ -309,6 +309,15 @@ it('explains the theme features and passes on the scan warnings', function () {
         ->toContain("Check these by hand:\n\n- Could not read inc/broken.php.");
 });
 
+it('says how many pages are converted from Elementor', function () {
+    expect(renderPlan(planTheme(), planSite(['elementorPages' => 13])))
+        ->toContain('- Elementor: 13 pages are converted from their Elementor data. The design is not converted; widgets without a view are listed under shortcodes and blocks.')
+        ->and(renderPlan(planTheme(), planSite(['elementorPages' => 1])))
+        ->toContain('- Elementor: 1 page is converted from its Elementor data.')
+        ->and(renderPlan(planTheme(), planSite()))
+        ->not->toContain('- Elementor:');
+});
+
 it('lists the content that is not migrated', function () {
     $finding = new Finding('elementor', 'Elementor', true, 2, [5, 8]);
 

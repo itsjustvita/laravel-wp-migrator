@@ -76,8 +76,8 @@ it('imports the fixture site without errors or open references', function () {
         ->and($report->unresolvedReferences())->toBe([])
         ->and($report->warnings())->toBe([])
         ->and(array_keys($report->unknownShortcodes()))->toBe(['contact-form-7'])
-        ->and(array_keys($report->unknownBlocks()))->toBe(['acme/hero'])
-        ->and(array_map(fn ($finding) => $finding->key, $report->findings()))->toBe(['elementor']);
+        ->and(array_keys($report->unknownBlocks()))->toBe(['acme/hero', 'elementor/acme-hero'])
+        ->and(array_map(fn ($finding) => $finding->key, $report->findings()))->toBe(['elementor-theme-builder']);
 });
 
 it('imports classic and block content', function () {
@@ -108,6 +108,32 @@ it('imports classic and block content', function () {
         ->and($block->blocks[5]['innerHTML'])->toContain('[gallery] stays literal')
         ->and($block->blocks[6]['innerHTML'])->toContain('Get in touch!')
         ->and($block->terms->pluck('slug')->sort()->values()->all())->toBe(['php', 'tech']);
+});
+
+it('converts a page built with Elementor from its data', function () {
+    importFixtureSite();
+
+    $landing = fixturePost('Landing');
+    $hero = fixtureMedia('hero.png');
+    $shape = fn (array $block): array => [$block['name'], $block['innerHTML'], array_map(fn (array $inner) => $inner['name'], $block['innerBlocks'])];
+
+    [$container] = $landing->blocks;
+    [$heading, $text, $row, $custom, $global] = $container['innerBlocks'];
+    [$image, $buttons] = $row['innerBlocks'];
+
+    expect($landing->blocks)->toHaveCount(1)
+        ->and($shape($container))->toBe(['core/group', '<div class="wp-block-group"></div>', ['core/heading', 'core/freeform', 'core/group', 'elementor/acme-hero', 'core/heading']])
+        ->and($heading['innerHTML'])->toBe('<h1 class="wp-block-heading">Welcome</h1>')
+        ->and($text['innerHTML'])->toBe('<p>Read <a href="/about">about us</a>.</p>')
+        ->and($row['attrs'])->toEqual(['layout' => ['type' => 'flex', 'flexWrap' => 'nowrap']])
+        ->and($image['attrs'])->toEqual(['id' => $hero->id, 'sizeSlug' => 'large'])
+        ->and($image['innerHTML'])->toContain('src="/storage/wp-uploads/2026/01/hero.png" alt="Hero"')
+        ->and($buttons['innerBlocks'][0]['innerHTML'])->toContain('href="/about"')
+        // MySQL orders the keys of JSON objects itself.
+        ->and($custom['attrs'])->toEqual(['hero_title' => 'Big news', 'cta' => ['url' => '/about']])
+        ->and($global['innerHTML'])->toBe('<h3 class="wp-block-heading">Shared notice</h3>')
+        ->and($landing->content_raw)->toContain('Welcome to the landing page')
+        ->and(Post::query()->where('type', 'elementor_library')->exists())->toBeFalse();
 });
 
 it('imports pages with their hierarchy and template, and drafts as drafts', function () {
@@ -270,9 +296,10 @@ it('reads the facts for the migration plan', function () {
         ->and($site->stylesheet)->toBe('twentytwentyone')
         ->and($site->plugins)->toContain('secure-custom-fields/secure-custom-fields.php')
         ->and(array_keys($site->shortcodes))->toBe(['contact-form-7'])
-        ->and(array_keys($site->blocks))->toBe(['acme/hero'])
+        ->and(array_keys($site->blocks))->toBe(['acme/hero', 'elementor/acme-hero'])
+        ->and($site->elementorPages)->toBe(1)
         ->and($site->menus)->toBe(['primary' => ['menu' => 'Main Menu', 'items' => 5]])
         ->and($site->pageTemplates)->toBe(['template-wide.php' => [['title' => 'About us', 'type' => 'page']]])
         ->and($site->taxonomies)->toHaveKeys(['category', 'post_tag'])
-        ->and(array_map(fn ($finding) => $finding->key, $site->findings))->toBe(['elementor']);
+        ->and(array_map(fn ($finding) => $finding->key, $site->findings))->toBe(['elementor-theme-builder']);
 });

@@ -92,6 +92,7 @@ it('lists unsupported content with affected post ids', function () {
     $landing = $site->page(['post_title' => 'Landing']);
     $site->postMeta($landing, '_elementor_data', '[{"id":"x"}]');
     $divi = $site->page(['post_content' => '[et_pb_section][/et_pb_section]']);
+    config()->set('wp-migrator.content.elementor', false);
 
     $this->artisan('wp:check')
         ->expectsOutputToContain("1 post (ID {$landing})")

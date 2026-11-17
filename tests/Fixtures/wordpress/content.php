@@ -191,9 +191,41 @@ update_field('field_sections', [
 ], $event);
 update_field('field_venue', ['field_venue_name' => 'Open Air Stage', 'field_venue_capacity' => 800], $event);
 
+// A page built with Elementor, saved the way Elementor saves it: the element
+// tree as slashed JSON in _elementor_data, an HTML copy in the content.
+function fixture_elementor(int $post, string $type, array $elements): void
+{
+    update_post_meta($post, '_elementor_edit_mode', 'builder');
+    update_post_meta($post, '_elementor_template_type', $type);
+    update_post_meta($post, '_elementor_version', '3.25.0');
+    update_post_meta($post, '_elementor_data', wp_slash(wp_json_encode($elements)));
+}
+
+$widget = fixture_post(['post_type' => 'elementor_library', 'post_title' => 'Global notice', 'post_content' => '']);
+fixture_elementor($widget, 'widget', [
+    ['id' => 'g1', 'elType' => 'widget', 'widgetType' => 'heading', 'settings' => ['title' => 'Shared notice', 'header_size' => 'h3'], 'elements' => []],
+]);
+
+$header = fixture_post(['post_type' => 'elementor_library', 'post_title' => 'Site header', 'post_content' => '']);
+fixture_elementor($header, 'header', [
+    ['id' => 'h1', 'elType' => 'widget', 'widgetType' => 'heading', 'settings' => ['title' => 'Acme'], 'elements' => []],
+]);
+
+$landing = fixture_post(['post_type' => 'page', 'post_title' => 'Landing', 'post_name' => 'landing', 'post_content' => '<div class="elementor">Welcome to the landing page</div>']);
+fixture_elementor($landing, 'wp-page', [
+    ['id' => 'c1', 'elType' => 'container', 'isInner' => false, 'settings' => ['content_width' => 'boxed'], 'elements' => [
+        ['id' => 'w1', 'elType' => 'widget', 'widgetType' => 'heading', 'settings' => ['title' => 'Welcome', 'header_size' => 'h1'], 'elements' => []],
+        ['id' => 'w2', 'elType' => 'widget', 'widgetType' => 'text-editor', 'settings' => ['editor' => '<p>Read <a href="'.get_permalink($about).'">about us</a>.</p>'], 'elements' => []],
+        ['id' => 'c2', 'elType' => 'container', 'isInner' => true, 'settings' => ['flex_direction' => 'row'], 'elements' => [
+            ['id' => 'w3', 'elType' => 'widget', 'widgetType' => 'image', 'settings' => ['image' => ['id' => $hero, 'url' => wp_get_attachment_url($hero), 'alt' => 'Hero']], 'elements' => []],
+            ['id' => 'w4', 'elType' => 'widget', 'widgetType' => 'button', 'settings' => ['text' => 'Learn more', 'link' => ['url' => get_permalink($about), 'is_external' => '', 'nofollow' => '']], 'elements' => []],
+        ]],
+        ['id' => 'w5', 'elType' => 'widget', 'widgetType' => 'acme-hero', 'settings' => ['hero_title' => 'Big news', 'cta' => ['url' => get_permalink($about)]], 'elements' => []],
+        ['id' => 'w6', 'elType' => 'widget', 'widgetType' => 'global', 'templateID' => $widget, 'settings' => [], 'elements' => []],
+    ]],
+]);
+
 // Content that is not migrated or not imported
-$landing = fixture_post(['post_type' => 'page', 'post_title' => 'Landing', 'post_name' => 'landing', 'post_content' => '<div class="elementor">Built with a page builder</div>']);
-update_post_meta($landing, '_elementor_data', '[{"id":"a1b2","elType":"section"}]');
 fixture_post(['post_title' => 'Unfinished', 'post_status' => 'draft', 'post_content' => 'Not ready yet.']);
 
 // A classic menu in a theme location

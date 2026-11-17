@@ -156,10 +156,31 @@ it('runs all default detectors and returns one finding each', function () {
     $site = $this->source();
     $page = $site->page();
     $site->postMeta($page, '_elementor_data', '[{"id":"x"}]');
+    config()->set('wp-migrator.content.elementor', false);
 
     $findings = app(UnsupportedContentDetector::class)->findings();
 
     expect($findings)->toHaveCount(9)
         ->and(array_map(fn (Finding $f) => $f->key, $findings))->toContain('elementor', 'divi', 'multisite')
         ->and(array_filter($findings, fn (Finding $f) => $f->detected))->toHaveCount(1);
+});
+
+it('reports only the Elementor theme builder while pages are converted', function () {
+    $site = $this->source();
+    $page = $site->page();
+    $site->postMeta($page, '_elementor_data', '[{"id":"x"}]');
+    $site->postMeta($page, '_elementor_template_type', 'wp-page');
+    $header = $site->post(['post_type' => 'elementor_library', 'post_title' => 'Header']);
+    $site->postMeta($header, '_elementor_template_type', 'header');
+    $popup = $site->post(['post_type' => 'elementor_library', 'post_title' => 'Popup']);
+    $site->postMeta($popup, '_elementor_template_type', 'popup');
+    $section = $site->post(['post_type' => 'elementor_library', 'post_title' => 'Saved section']);
+    $site->postMeta($section, '_elementor_template_type', 'section');
+    $stray = $site->post(['post_type' => 'post']);
+    $site->postMeta($stray, '_elementor_template_type', 'header');
+
+    $findings = array_filter(app(UnsupportedContentDetector::class)->findings(), fn (Finding $f) => $f->detected);
+
+    expect(array_map(fn (Finding $f) => [$f->key, $f->label, $f->sampleIds], array_values($findings)))
+        ->toBe([['elementor-theme-builder', 'Elementor theme builder', [$header, $popup]]]);
 });

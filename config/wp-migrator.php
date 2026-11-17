@@ -178,6 +178,12 @@ return [
 
     'content' => [
         'max_json_depth' => 31,
+
+        // Convert pages built with Elementor from their Elementor data into
+        // blocks: layout, text, images, buttons and other common widgets.
+        // Other widgets become elementor/<widget> blocks with their settings.
+        // Off, the HTML copy Elementor keeps in the content is imported.
+        'elementor' => true,
     ],
 
     /*

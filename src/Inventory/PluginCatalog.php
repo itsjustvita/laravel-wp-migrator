@@ -15,6 +15,10 @@ final class PluginCatalog
 
     private const string LANGUAGES = 'Translations are not migrated; plan how the new site handles languages before the import.';
 
+    private const string ELEMENTOR = 'Its pages are converted into blocks: layout, text, images, buttons and other common widgets, but not the design. Other widgets become `elementor/*` blocks with their settings; give them views.';
+
+    private const string ELEMENTOR_PRO = 'Its pages are converted like those of Elementor. Rebuild its theme builder templates such as headers and footers, its popups and its forms in the new frontend.';
+
     private const string SECURITY = 'It protects WP itself and has no counterpart in Laravel.';
 
     private const string CACHE = 'Use HTTP caching, the Laravel cache and Vite for assets instead.';
@@ -62,9 +66,9 @@ final class PluginCatalog
         'cookiebot' => ['Cookiebot', 'replace', 'Add a cookie consent banner to the new frontend.'],
         'google-site-kit' => ['Site Kit by Google', 'replace', self::TRACKING],
         'google-analytics-for-wordpress' => ['MonsterInsights', 'replace', self::TRACKING],
-        'elementor' => ['Elementor', 'unsupported', self::BUILDER],
-        'elementor-pro' => ['Elementor Pro', 'unsupported', self::BUILDER],
-        'pro-elements' => ['PRO Elements', 'unsupported', self::BUILDER],
+        'elementor' => ['Elementor', 'handled', self::ELEMENTOR],
+        'elementor-pro' => ['Elementor Pro', 'replace', self::ELEMENTOR_PRO],
+        'pro-elements' => ['PRO Elements', 'replace', self::ELEMENTOR_PRO],
         'js_composer' => ['WPBakery Page Builder', 'unsupported', self::BUILDER],
         'divi-builder' => ['Divi Builder', 'unsupported', self::BUILDER],
         'beaver-builder-lite-version' => ['Beaver Builder', 'unsupported', self::BUILDER],

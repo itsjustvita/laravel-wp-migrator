@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace ItsJustVita\WpMigrator\Detection;
 
+use Illuminate\Config\Repository;
 use ItsJustVita\WpMigrator\Detection\Detectors\BeaverBuilderDetector;
 use ItsJustVita\WpMigrator\Detection\Detectors\DiviDetector;
 use ItsJustVita\WpMigrator\Detection\Detectors\ElementorDetector;
+use ItsJustVita\WpMigrator\Detection\Detectors\ElementorThemeBuilderDetector;
 use ItsJustVita\WpMigrator\Detection\Detectors\MultisiteDetector;
 use ItsJustVita\WpMigrator\Detection\Detectors\OxygenDetector;
 use ItsJustVita\WpMigrator\Detection\Detectors\PolylangDetector;
@@ -42,9 +44,13 @@ class UnsupportedContentDetector
     public function __construct(
         private readonly WpDatabase $db,
         ?array $detectors = null,
+        ?Repository $config = null,
     ) {
+        $convertsElementor = $config?->boolean('wp-migrator.content.elementor', true) ?? true;
+
         $this->detectors = $detectors ?? array_map(
-            fn (string $class): Detector => new $class,
+            // Pages built with Elementor are converted; only the theme builder is not.
+            fn (string $class): Detector => $class === ElementorDetector::class && $convertsElementor ? new ElementorThemeBuilderDetector : new $class,
             self::DEFAULT_DETECTORS,
         );
     }

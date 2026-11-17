@@ -136,6 +136,15 @@ class MigrationPlan
         $parts = count(array_filter($this->theme->templates, fn (Template $template): bool => $template->kind === 'part'));
         $lines[] = sprintf('- Templates: %d, template parts: %d', count($this->theme->templates) - $parts, $parts);
 
+        if ($this->site->elementorPages > 0) {
+            $lines[] = sprintf(
+                '- Elementor: %d %s converted from %s Elementor data. The design is not converted; widgets without a view are listed under shortcodes and blocks.',
+                $this->site->elementorPages,
+                $this->site->elementorPages === 1 ? 'page is' : 'pages are',
+                $this->site->elementorPages === 1 ? 'its' : 'their',
+            );
+        }
+
         $counts = $this->contentCounts();
 
         if ($counts !== []) {

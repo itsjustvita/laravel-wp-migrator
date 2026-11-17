@@ -131,10 +131,69 @@ it('treats unreadable options as empty', function () {
 
 it('reports content that is not migrated', function () {
     $site = $this->source();
-    $page = $site->page(['post_title' => 'Landing']);
-    $site->postMeta($page, '_elementor_data', '[{"id":"x"}]');
+    $site->post(['post_type' => 'product', 'post_title' => 'Shirt']);
+    $header = $site->post(['post_type' => 'elementor_library', 'post_title' => 'Header']);
+    $site->postMeta($header, '_elementor_template_type', 'header');
 
-    expect(array_map(fn ($finding) => $finding->key, readSite()->findings))->toBe(['elementor']);
+    expect(array_map(fn ($finding) => $finding->key, readSite()->findings))->toBe(['elementor-theme-builder', 'woocommerce']);
+});
+
+it('scans pages built with Elementor the way the import converts them', function () {
+    $site = $this->source();
+    $page = $site->page(['post_title' => 'Landing', 'post_content' => '<p>[copy-only] HTML copy</p><!-- wp:acme/copy /-->']);
+    $site->postMeta($page, '_elementor_edit_mode', 'builder');
+    $site->postMeta($page, '_elementor_data', json_encode([
+        ['elType' => 'container', 'settings' => [], 'elements' => [
+            ['elType' => 'widget', 'widgetType' => 'acme-hero', 'settings' => ['title' => 'Hi']],
+            ['elType' => 'widget', 'widgetType' => 'acme-hero', 'settings' => []],
+            ['elType' => 'container', 'settings' => [], 'elements' => [
+                ['elType' => 'widget', 'widgetType' => 'shortcode', 'settings' => ['shortcode' => '[newsletter]']],
+            ]],
+            ['elType' => 'widget', 'widgetType' => 'heading', 'settings' => ['title' => 'Known']],
+        ]],
+    ]));
+    $switched = $site->page(['post_title' => 'Switched back', 'post_content' => '[from-content]']);
+    $site->postMeta($switched, '_elementor_edit_mode', '');
+    $site->postMeta($switched, '_elementor_data', json_encode([['elType' => 'widget', 'widgetType' => 'acme-old', 'settings' => []]]));
+    $broken = $site->page(['post_title' => 'Broken', 'post_content' => '[broken-copy]']);
+    $site->postMeta($broken, '_elementor_edit_mode', 'builder');
+    $site->postMeta($broken, '_elementor_data', '{broken');
+
+    $facts = readSite();
+
+    expect($facts->elementorPages)->toBe(1)
+        ->and($facts->blocks)->toBe(['elementor/acme-hero' => ['count' => 2, 'post_ids' => [$page]]])
+        ->and($facts->shortcodes)->toBe([
+            'newsletter' => ['count' => 1, 'post_ids' => [$page]],
+            'from-content' => ['count' => 1, 'post_ids' => [$switched]],
+            'broken-copy' => ['count' => 1, 'post_ids' => [$broken]],
+        ]);
+});
+
+it('scans the content of an Elementor page whose data holds nothing', function () {
+    $site = $this->source();
+    $page = $site->page(['post_content' => '[from-copy]']);
+    $site->postMeta($page, '_elementor_edit_mode', 'builder');
+    $site->postMeta($page, '_elementor_data', json_encode([['elType' => 'container', 'settings' => [], 'elements' => []]]));
+
+    $facts = readSite();
+
+    expect($facts->elementorPages)->toBe(0)
+        ->and(array_keys($facts->shortcodes))->toBe(['from-copy']);
+});
+
+it('scans the content of Elementor pages when conversion is off', function () {
+    $site = $this->source();
+    $page = $site->page(['post_content' => '[copy-only]']);
+    $site->postMeta($page, '_elementor_edit_mode', 'builder');
+    $site->postMeta($page, '_elementor_data', json_encode([['elType' => 'widget', 'widgetType' => 'acme-hero', 'settings' => []]]));
+    config()->set('wp-migrator.content.elementor', false);
+
+    $facts = readSite();
+
+    expect($facts->elementorPages)->toBe(0)
+        ->and($facts->blocks)->toBe([])
+        ->and(array_keys($facts->shortcodes))->toBe(['copy-only']);
 });
 
 it('reports a source database it cannot read', function () {

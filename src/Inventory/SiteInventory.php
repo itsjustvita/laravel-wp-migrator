@@ -8,11 +8,14 @@ use Illuminate\Config\Repository;
 use ItsJustVita\WpMigrator\Content\Blocks\Block;
 use ItsJustVita\WpMigrator\Content\Blocks\BlockParser;
 use ItsJustVita\WpMigrator\Content\Blocks\BlockRenderer;
+use ItsJustVita\WpMigrator\Content\Elementor\ElementorConverter;
 use ItsJustVita\WpMigrator\Content\Shortcodes\ShortcodeProcessor;
 use ItsJustVita\WpMigrator\Detection\Finding;
 use ItsJustVita\WpMigrator\Detection\UnsupportedContentDetector;
+use ItsJustVita\WpMigrator\Source\Dto\MetaBag;
 use ItsJustVita\WpMigrator\Source\ExcludedUsers;
 use ItsJustVita\WpMigrator\Source\Readers\MenuReader;
+use ItsJustVita\WpMigrator\Source\Readers\MetaLoader;
 use ItsJustVita\WpMigrator\Source\SourceStats;
 use ItsJustVita\WpMigrator\Source\WpDatabase;
 use ItsJustVita\WpMigrator\Support\MalformedSerializedValue;
@@ -39,6 +42,8 @@ class SiteInventory
         private readonly BlockRenderer $renderer,
         private readonly WpMigrator $registry,
         private readonly ExcludedUsers $excluded,
+        private readonly ElementorConverter $elementor,
+        private readonly MetaLoader $meta,
     ) {}
 
     public function read(): SiteFacts
@@ -46,7 +51,7 @@ class SiteInventory
         try {
             $this->db->ping();
 
-            [$shortcodes, $blocks] = $this->scanContent();
+            [$shortcodes, $blocks, $elementorPages] = $this->scanContent();
 
             return new SiteFacts(
                 reachable: true,
@@ -66,6 +71,7 @@ class SiteInventory
                 userCount: $this->stats->userCount(),
                 administrators: $this->administrators(),
                 queryVars: $this->queryVars(),
+                elementorPages: $elementorPages,
             );
         } catch (Throwable $exception) {
             return SiteFacts::unreachable($exception->getMessage());
@@ -73,38 +79,90 @@ class SiteInventory
     }
 
     /**
-     * Shortcodes and blocks in the content that the package cannot render yet.
+     * Shortcodes and blocks in the content that the package cannot render
+     * yet, and the number of pages converted from their Elementor data.
+     * Those pages are scanned the way the import converts them.
      *
-     * @return array{0: array<string, array{count: int, post_ids: list<int>}>, 1: array<string, array{count: int, post_ids: list<int>}>}
+     * @return array{0: array<string, array{count: int, post_ids: list<int>}>, 1: array<string, array{count: int, post_ids: list<int>}>, 2: int}
      */
     private function scanContent(): array
     {
         $shortcodes = [];
         $blocks = [];
+        $elementorPages = 0;
+        $convertsElementor = $this->config->boolean('wp-migrator.content.elementor', true);
 
         $posts = $this->db->posts()
             ->whereNotIn('post_type', $this->config->array('wp-migrator.import.excluded_post_types'))
             ->whereIn('post_status', $this->config->array('wp-migrator.import.post_statuses'))
             ->select(['ID', 'post_content']);
 
-        foreach ($posts->lazyById(200, 'ID') as $post) {
-            $id = (int) $post->ID;
-            $content = (string) $post->post_content;
+        foreach ($posts->lazyById(200, 'ID')->chunk(200) as $rows) {
+            $ids = array_values($rows->map(fn (object $row): int => (int) $row->ID)->all());
+            $meta = $convertsElementor ? $this->meta->load('postmeta', 'post_id', $ids) : [];
 
-            if (str_contains($content, '[')) {
-                $this->shortcodes->process($content, fn (): bool => false, fn (): string => '', function (string $tag) use (&$shortcodes, $id): void {
-                    if (! $this->registry->hasShortcode($tag)) {
-                        $this->count($shortcodes, $tag, $id);
-                    }
-                });
-            }
+            foreach ($rows as $post) {
+                $id = (int) $post->ID;
+                $tree = $this->elementorTree($meta[$id] ?? MetaBag::empty());
 
-            if (str_contains($content, '<!-- wp:')) {
-                $this->countBlocks($this->parser->parse($content), $blocks, $id);
+                if ($tree !== null) {
+                    $elementorPages++;
+                    $this->countBlocks($tree, $blocks, $id);
+                    $this->countShortcodes($this->html($tree), $shortcodes, $id);
+
+                    continue;
+                }
+
+                $content = (string) $post->post_content;
+                $this->countShortcodes($content, $shortcodes, $id);
+
+                if (str_contains($content, '<!-- wp:')) {
+                    $this->countBlocks($this->parser->parse($content), $blocks, $id);
+                }
             }
         }
 
-        return [$shortcodes, $blocks];
+        return [$shortcodes, $blocks, $elementorPages];
+    }
+
+    /**
+     * The blocks a page built with Elementor is converted into, or null.
+     *
+     * @return list<Block>|null
+     */
+    private function elementorTree(MetaBag $meta): ?array
+    {
+        if (! ElementorConverter::builtWith($meta)) {
+            return null;
+        }
+
+        $tree = $this->elementor->convert((string) $meta->get('_elementor_data'), function (): void {});
+
+        return $tree === null || $tree === [] ? null : $tree;
+    }
+
+    /**
+     * @param  list<Block>  $tree
+     */
+    private function html(array $tree): string
+    {
+        return implode('', array_map(fn (Block $block): string => $block->innerHtml.$this->html($block->innerBlocks), $tree));
+    }
+
+    /**
+     * @param  array<string, array{count: int, post_ids: list<int>}>  $shortcodes
+     */
+    private function countShortcodes(string $content, array &$shortcodes, int $id): void
+    {
+        if (! str_contains($content, '[')) {
+            return;
+        }
+
+        $this->shortcodes->process($content, fn (): bool => false, fn (): string => '', function (string $tag) use (&$shortcodes, $id): void {
+            if (! $this->registry->hasShortcode($tag)) {
+                $this->count($shortcodes, $tag, $id);
+            }
+        });
     }
 
     /**

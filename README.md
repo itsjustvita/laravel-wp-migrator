@@ -4,7 +4,7 @@
 
 Move a WP site's content into a clean Laravel application without losing data, URLs or rankings.
 
-The package migrates posts, pages, custom post types, media, taxonomies, menus, users and comments into its own schema, parses block and classic content into a renderable structure, imports SEO meta and custom fields, keeps old URLs alive through redirects, and lets existing users keep their passwords. It does not convert theme or plugin code. Instead, it produces an inventory of the theme and a migration plan for rebuilding the frontend in Blade.
+The package migrates posts, pages, custom post types, media, taxonomies, menus, users and comments into its own schema, parses block, classic and Elementor content into a renderable structure, imports SEO meta and custom fields, keeps old URLs alive through redirects, and lets existing users keep their passwords. It does not convert theme or plugin code. Instead, it produces an inventory of the theme and a migration plan for rebuilding the frontend in Blade.
 
 > **Status:** stable since 1.0. Breaking changes to the public API come only with a new major version, see [Versioning](#versioning) and the [changelog](CHANGELOG.md).
 
@@ -124,6 +124,24 @@ WpMigrator::renderBlockUsing('acme/hero', 'components.hero');
 ```
 
 Blocks without a view render their stored HTML and are listed in the report. Dynamic blocks such as `core/latest-posts` store no HTML, so they render nothing until you give them a view.
+
+### Elementor
+
+Pages built with Elementor are converted from the element tree Elementor stores, not from the HTML copy it keeps in the content. Containers become groups, sections and columns become columns, and the common widgets become the matching core blocks: heading, text, image, button, video, divider, spacer, icon list, HTML, shortcode, image gallery, icon box, image box, testimonial, accordion, toggle and tabs. Global widgets and templates from the Elementor library are replaced by their content. The design, such as colors, fonts and spacing, is not converted.
+
+Every other widget, whether from Elementor Pro, another plugin or the theme, becomes a block named `elementor/<widget>` that holds all the widget's settings as attributes. Links in them point to the new URLs; IDs of media or posts stay those of the old site. Give such a widget a view and it renders like any other block:
+
+```blade
+{{-- resources/views/vendor/wp-migrator/blocks/elementor/acme-hero.blade.php --}}
+<section class="hero">
+    <h1>{{ $attrs['hero_title'] ?? '' }}</h1>
+    @isset($attrs['cta']['url'])
+        <a href="{{ $attrs['cta']['url'] }}">{{ $attrs['cta_text'] ?? 'More' }}</a>
+    @endisset
+</section>
+```
+
+The migration plan lists these widgets with the posts that use them, and `wp:check` reports the templates of the Elementor theme builder, such as headers, footers and popups, which are not migrated. Values of dynamic tags are not resolved. Set `content.elementor` to `false` to import the HTML copy instead; it is also used when the Elementor data of a page cannot be read.
 
 ### Shortcodes
 

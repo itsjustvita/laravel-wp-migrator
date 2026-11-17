@@ -312,6 +312,7 @@ it('adds unsupported content to the report', function () {
     $site = $this->source();
     $landing = $site->page(['post_title' => 'Landing']);
     $site->postMeta($landing, '_elementor_data', '[{"id":"x"}]');
+    config()->set('wp-migrator.content.elementor', false);
 
     $report = runImport(new ImportOptions(only: ['pages']));
 
