@@ -92,6 +92,25 @@ The plan is a Markdown checklist for whoever builds the new frontend:
 
 The theme is never run. PHP files are parsed, and only values written literally in the code are read, so a `register_post_type($type)` with a computed name is listed at the end of the plan to check by hand. When the source database cannot be read, the plan is written from the theme alone.
 
+### Scaffolding the frontend
+
+`wp:scaffold` turns the migration plan into a working start for the frontend:
+
+```bash
+php artisan wp:scaffold
+php artisan wp:scaffold --force   # also replace files that exist
+```
+
+It reads the theme and the source database like `wp:inventory`, and the imported content, and writes:
+
+- `routes/wp.php` with routes from the URL patterns, and a line in `routes/web.php` that loads it
+- `app/Http/Controllers/WpController.php` for the front page, single posts and pages, archives, taxonomy archives and search, and `app/Support/WpUrl.php` for links to posts and terms
+- views under the names the migration plan uses, such as `pages/show`, `events/show` and `posts/index`, each noting the theme file it replaces
+- the layout `layouts/wp` with the SEO tags, a layout for each page template, and components for the header, the footer and the menus of the theme's locations
+- a view for each block without one; for Elementor widgets it lists the settings the imported widgets hold
+
+Run it after the import. The files belong to your application: change them as you like, `wp:scaffold` keeps files that exist unless you pass `--force`. Remove the default route for `/` from `routes/web.php` so the front page shows. Author archives are not scaffolded, since the imported users keep no slug to find them by.
+
 ### Suspicious content
 
 Agencies are often asked to move a site after it was hacked. The import keeps the HTML of the content as it is, so injected code would come along. `wp:check`, the import report and the migration plan therefore list signs of a hack:
@@ -329,7 +348,7 @@ class EventMapper implements PostMapper
 1. **Prepare.** Get a copy of the WP database and the `wp-content/uploads` directory, ideally with the theme next to it in `wp-content/themes`. Import the dump into a database the new application can read, add the connection, set `source.uploads_path`, and run `php artisan wp:check`. It shows what the site contains and which content the package does not migrate.
 2. **Plan.** Run `php artisan wp:inventory` and read `docs/wp-migration-plan.md`. Before the first import, check the administrator accounts and the suspicious content it lists, leave out post types that hold data rather than content, and decide on the URL patterns in the `urls` section of the configuration: links in the content, menu items and redirects are built from them.
 3. **Import.** Run `php artisan wp:import --dry-run`, read the report in `storage/logs`, then run `php artisan wp:import`. The report lists unknown shortcodes, blocks without a view and links it could not resolve.
-4. **Build the frontend.** Work through the plan: routes, views, components, shortcode handlers and block views. Run `php artisan wp:import --force` after changing handlers, mappers or URL patterns, so unchanged rows are mapped again.
+4. **Build the frontend.** Run `php artisan wp:scaffold` for a working start: routes, a controller and plain views for everything in the plan. Then work through the plan: style the views, give blocks and widgets their markup and write shortcode handlers. Run `php artisan wp:import --force` after changing handlers, mappers or URL patterns, so unchanged rows are mapped again.
 5. **Import the changes.** Shortly before going live, take a fresh copy of the database and the uploads and run `php artisan wp:import` again. It only brings over what changed. Posts that were deleted or trashed on the old site in the meantime stay in the new one, so remove them by hand.
 6. **Switch.** Set `HASH_DRIVER=wordpress`, register the `RedirectMissingPages` middleware or export the redirects for the web server, point the DNS at the new application, and keep the old site and its database as a backup. With the middleware, the `hits` column of `redirects` shows which old URLs are still requested, and `php artisan wp:password-stats` shows how many users still have an old hash.
 
@@ -344,7 +363,7 @@ The package follows [Semantic Versioning](https://semver.org/). The public API i
 - the Blade components `<x-wp-blocks>` and `<x-wp-seo>`, the block view names and the variables they receive
 - the `wordpress` hashing driver and the `RedirectMissingPages` middleware
 
-Everything else, such as the importers, readers and the theme scanner, is internal and may change in a minor version. So may the wording of the import report and the migration plan.
+Everything else, such as the importers, readers and the theme scanner, is internal and may change in a minor version. So may the wording of the import report and the migration plan, and the files `wp:scaffold` writes; files it wrote earlier stay as they are.
 
 ## Development
 

@@ -24,6 +24,7 @@ final readonly class SiteFacts
      * @param  list<array{login: string, registered: string|null, excluded: bool}>  $administrators
      * @param  list<string>|null  $queryVars  query variables of the rewrite rules, null without pretty permalinks
      * @param  list<Finding>  $suspicious  signs of a hacked site
+     * @param  string|null  $frontPage  the slug of the page shown on the front page, null for the latest posts
      */
     public function __construct(
         public bool $reachable,
@@ -46,6 +47,7 @@ final readonly class SiteFacts
         public ?array $queryVars = null,
         public int $elementorPages = 0,
         public array $suspicious = [],
+        public ?string $frontPage = null,
     ) {}
 
     public static function unreachable(string $error): self

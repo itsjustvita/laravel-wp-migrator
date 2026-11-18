@@ -75,6 +75,7 @@ class SiteInventory
                 queryVars: $this->queryVars(),
                 elementorPages: $elementorPages,
                 suspicious: $this->suspicious->findings(),
+                frontPage: $this->frontPage(),
             );
         } catch (Throwable $exception) {
             return SiteFacts::unreachable($exception->getMessage());
@@ -278,6 +279,23 @@ class SiteInventory
         }
 
         return $widgets;
+    }
+
+    /**
+     * The slug of the page WP shows on the front page, when it shows one.
+     */
+    private function frontPage(): ?string
+    {
+        if ($this->db->option('show_on_front') !== 'page') {
+            return null;
+        }
+
+        $slug = $this->db->posts()
+            ->where('ID', (int) $this->db->option('page_on_front'))
+            ->where('post_type', 'page')
+            ->value('post_name');
+
+        return is_string($slug) && $slug !== '' ? $slug : null;
     }
 
     /**

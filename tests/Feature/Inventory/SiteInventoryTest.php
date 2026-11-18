@@ -202,6 +202,23 @@ it('reads the signs of a hacked site', function () {
     expect(array_map(fn ($finding) => [$finding->key, $finding->sampleIds], readSite()->suspicious))->toBe([['scripts', [$post]]]);
 });
 
+it('reads the page shown on the front page', function () {
+    $site = $this->source();
+    $home = $site->page(['post_title' => 'Welcome', 'post_name' => 'welcome']);
+    $post = $site->post(['post_title' => 'Not a page']);
+
+    expect(readSite()->frontPage)->toBeNull();
+
+    $site->option('show_on_front', 'page')->option('page_on_front', (string) $home);
+    expect(readSite()->frontPage)->toBe('welcome');
+
+    $site->option('page_on_front', (string) $post);
+    expect(readSite()->frontPage)->toBeNull();
+
+    $site->option('show_on_front', 'posts')->option('page_on_front', (string) $home);
+    expect(readSite()->frontPage)->toBeNull();
+});
+
 it('reports a source database it cannot read', function () {
     config()->set('database.connections.wordpress', ['driver' => 'sqlite', 'database' => '/nonexistent/wordpress.sqlite']);
     app('db')->purge('wordpress');

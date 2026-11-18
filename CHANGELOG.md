@@ -2,6 +2,17 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses [Semantic Versioning](https://semver.org/). Since 1.0, breaking changes to the public API come only with a new major version; the README lists what the public API covers.
 
+## [Unreleased]
+
+### Added
+
+- `wp:scaffold` turns the migration plan into a working start for the frontend: routes from the URL patterns, a controller for the front page, single posts and pages, archives, taxonomy archives and search, a helper for links, views under the names the plan uses, layouts for the page templates, components for the header, the footer and the menus, and views for blocks without one, listing the settings Elementor widgets hold. Existing files are kept unless `--force` is passed.
+- `wp:inventory` and `wp:scaffold` read which page WP shows on the front page.
+
+### Changed
+
+- The rules for the routes, views and layouts of the new frontend moved into one class that the migration plan and the scaffold share; the plan reads the same.
+
 ## [1.3.1] - 2026-11-18
 
 ### Changed
@@ -76,6 +87,7 @@ The first public version.
 - The theme inventory and the migration plan generator.
 - Content of page builders, WooCommerce, multilingual plugins and multisite installations is detected and reported, but not migrated.
 
+[Unreleased]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.3.1...HEAD
 [1.3.1]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.1.0...v1.2.0

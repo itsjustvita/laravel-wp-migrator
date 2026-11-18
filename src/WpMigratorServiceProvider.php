@@ -17,6 +17,7 @@ use ItsJustVita\WpMigrator\Console\ExportRedirectsCommand;
 use ItsJustVita\WpMigrator\Console\ImportCommand;
 use ItsJustVita\WpMigrator\Console\InventoryCommand;
 use ItsJustVita\WpMigrator\Console\PasswordStatsCommand;
+use ItsJustVita\WpMigrator\Console\ScaffoldCommand;
 use ItsJustVita\WpMigrator\Content\Urls\DefaultUrlResolver;
 use ItsJustVita\WpMigrator\Content\Urls\UrlResolver;
 use ItsJustVita\WpMigrator\Models\Comment;
@@ -86,6 +87,7 @@ class WpMigratorServiceProvider extends ServiceProvider
                 PasswordStatsCommand::class,
                 ExportRedirectsCommand::class,
                 InventoryCommand::class,
+                ScaffoldCommand::class,
             ]);
 
             $this->publishes([
