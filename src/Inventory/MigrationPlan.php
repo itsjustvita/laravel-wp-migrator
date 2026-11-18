@@ -8,6 +8,8 @@ use Carbon\CarbonImmutable;
 use Illuminate\Config\Repository;
 use Illuminate\Support\Str;
 use ItsJustVita\WpMigrator\Content\Urls\DefaultUrlResolver;
+use ItsJustVita\WpMigrator\Detection\Finding;
+use ItsJustVita\WpMigrator\Detection\Suspicious\SuspiciousContent;
 use ItsJustVita\WpMigrator\Inventory\Theme\AssetDefinition;
 use ItsJustVita\WpMigrator\Inventory\Theme\PostTypeDefinition;
 use ItsJustVita\WpMigrator\Inventory\Theme\Template;
@@ -71,6 +73,7 @@ class MigrationPlan
             $this->intro($now ?? CarbonImmutable::now()),
             $this->overview(),
             $this->users(),
+            $this->suspicious(),
             $this->routes(),
             $this->dataWithoutPages(),
             $this->components(),
@@ -301,6 +304,24 @@ class MigrationPlan
             $this->site->userCount,
             $this->site->userCount === 1 ? 'user' : 'users',
         );
+    }
+
+    private function suspicious(): string
+    {
+        if (! $this->site->reachable) {
+            return '';
+        }
+
+        if ($this->site->suspicious === []) {
+            return "## Suspicious content\n\nNo signs of a hacked site in the content, the options or the uploads.";
+        }
+
+        $items = array_map(
+            fn (Finding $finding): string => sprintf('- [ ] **%s**: %s. %s', $finding->label, $finding->summary(), SuspiciousContent::advice($finding->key)),
+            $this->site->suspicious,
+        );
+
+        return "## Suspicious content\n\n".implode("\n", $items);
     }
 
     private function dataWithoutPages(): string

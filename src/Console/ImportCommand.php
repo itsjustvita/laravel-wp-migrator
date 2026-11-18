@@ -121,6 +121,8 @@ class ImportCommand extends Command
 
         $this->components->twoColumnDetail('Warnings', (string) count($report->warnings()));
         $this->components->twoColumnDetail('Unresolved references', (string) count($report->unresolvedReferences()));
+        $suspicious = count($report->suspicious());
+        $this->components->twoColumnDetail('Suspicious content', $suspicious === 0 ? '0' : '<fg=yellow>'.$suspicious.'</>');
         $this->components->twoColumnDetail('Unsupported content', (string) count($report->findings()));
         $this->components->twoColumnDetail('Unknown shortcodes', (string) count($report->unknownShortcodes()));
         $this->components->twoColumnDetail('Blocks without a renderer', (string) count($report->unknownBlocks()));

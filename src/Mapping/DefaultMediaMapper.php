@@ -14,6 +14,7 @@ use ItsJustVita\WpMigrator\Mapping\Concerns\StoresSourceTimestamps;
 use ItsJustVita\WpMigrator\Models\Media;
 use ItsJustVita\WpMigrator\Source\Dto\SourceMedia;
 use ItsJustVita\WpMigrator\Source\Uploads;
+use ItsJustVita\WpMigrator\Support\ExecutableFile;
 use RuntimeException;
 
 /**
@@ -24,9 +25,6 @@ use RuntimeException;
 class DefaultMediaMapper implements MediaMapper
 {
     use StoresSourceTimestamps;
-
-    /** Extensions a web server may hand to an interpreter, never copied. */
-    private const string EXECUTABLE_EXTENSIONS = '/^(?:php\d*|phtml|pht|phps|phar|inc|cgi|fcgi|pl|py|rb|sh|bash|asp|aspx|ashx|asmx|cer|jsp|jspx|shtml?|htaccess|htpasswd|ini|exe|dll|bat|cmd|com)$/';
 
     public function __construct(
         protected readonly Repository $config,
@@ -177,13 +175,11 @@ class DefaultMediaMapper implements MediaMapper
             return false;
         }
 
-        $segments = array_map(strtolower(...), array_slice(explode('.', $name), 1));
-
-        foreach ($segments as $segment) {
-            if (preg_match(self::EXECUTABLE_EXTENSIONS, $segment) === 1) {
-                return false;
-            }
+        if (ExecutableFile::isCodeOrConfig($name)) {
+            return false;
         }
+
+        $segments = array_map(strtolower(...), array_slice(explode('.', $name), 1));
 
         $allowed = array_map(
             fn (mixed $extension): string => strtolower(ltrim((string) $extension, '.')),

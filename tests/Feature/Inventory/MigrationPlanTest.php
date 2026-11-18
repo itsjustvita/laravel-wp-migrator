@@ -309,6 +309,22 @@ it('explains the theme features and passes on the scan warnings', function () {
         ->toContain("Check these by hand:\n\n- Could not read inc/broken.php.");
 });
 
+it('lists the signs of a hacked site before the routes', function () {
+    $plan = renderPlan(planTheme(), planSite(['suspicious' => [
+        Finding::posts('scripts', 'Scripts in the content', 2, [4, 9], 'from evil.example'),
+        Finding::present('uploads', 'Program files in the uploads', '1 file: 2026/01/shell.php'),
+    ]]));
+
+    expect($plan)
+        ->toContain("## Suspicious content\n\n- [ ] **Scripts in the content**: 2 posts (IDs 4, 9); from evil.example. The import keeps the HTML as it is")
+        ->toContain('- [ ] **Program files in the uploads**: 1 file: 2026/01/shell.php. The import never copies them')
+        ->and(strpos($plan, '## Suspicious content'))->toBeLessThan(strpos($plan, '## Routes and views'))
+        ->and(renderPlan(planTheme(), planSite()))
+        ->toContain("## Suspicious content\n\nNo signs of a hacked site in the content, the options or the uploads.")
+        ->and(renderPlan(planTheme(), SiteFacts::unreachable('down')))
+        ->not->toContain('## Suspicious content');
+});
+
 it('says how many pages are converted from Elementor', function () {
     expect(renderPlan(planTheme(), planSite(['elementorPages' => 13])))
         ->toContain('- Elementor: 13 pages are converted from their Elementor data. The design is not converted; widgets without a view are listed under shortcodes and blocks.')

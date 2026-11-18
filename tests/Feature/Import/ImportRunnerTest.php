@@ -320,6 +320,16 @@ it('adds unsupported content to the report', function () {
         ->and($report->toMarkdown())->toContain('**Elementor**: 1 post (ID '.$landing.')');
 });
 
+it('adds suspicious content to the report', function () {
+    $site = $this->source();
+    $post = $site->post(['post_title' => 'Planted', 'post_content' => '<img src=x onerror="alert(1)">']);
+
+    $report = runImport(new ImportOptions(only: ['posts']));
+
+    expect(array_map(fn ($finding) => $finding->key, $report->suspicious()))->toBe(['event-handlers'])
+        ->and($report->toMarkdown())->toContain("## Suspicious content (1)\n\n- **Event handlers in the content**: 1 post (ID {$post}); onerror. The import keeps the HTML as it is");
+});
+
 it('never changes a linked user, not even when the source row changes later', function () {
     $existing = User::create(['name' => 'App Admin', 'email' => 'alice@example.com', 'password' => 'secret']);
     $appHash = User::query()->value('password');

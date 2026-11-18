@@ -11,6 +11,7 @@ use ItsJustVita\WpMigrator\Content\Blocks\BlockRenderer;
 use ItsJustVita\WpMigrator\Content\Elementor\ElementorConverter;
 use ItsJustVita\WpMigrator\Content\Shortcodes\ShortcodeProcessor;
 use ItsJustVita\WpMigrator\Detection\Finding;
+use ItsJustVita\WpMigrator\Detection\Suspicious\SuspiciousContent;
 use ItsJustVita\WpMigrator\Detection\UnsupportedContentDetector;
 use ItsJustVita\WpMigrator\Source\Dto\MetaBag;
 use ItsJustVita\WpMigrator\Source\ExcludedUsers;
@@ -44,6 +45,7 @@ class SiteInventory
         private readonly ExcludedUsers $excluded,
         private readonly ElementorConverter $elementor,
         private readonly MetaLoader $meta,
+        private readonly SuspiciousContent $suspicious,
     ) {}
 
     public function read(): SiteFacts
@@ -72,6 +74,7 @@ class SiteInventory
                 administrators: $this->administrators(),
                 queryVars: $this->queryVars(),
                 elementorPages: $elementorPages,
+                suspicious: $this->suspicious->findings(),
             );
         } catch (Throwable $exception) {
             return SiteFacts::unreachable($exception->getMessage());

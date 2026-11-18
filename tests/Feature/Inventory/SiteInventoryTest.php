@@ -196,6 +196,12 @@ it('scans the content of Elementor pages when conversion is off', function () {
         ->and(array_keys($facts->shortcodes))->toBe(['copy-only']);
 });
 
+it('reads the signs of a hacked site', function () {
+    $post = $this->source()->post(['post_content' => '<script src="https://evil.example/x.js"></script>']);
+
+    expect(array_map(fn ($finding) => [$finding->key, $finding->sampleIds], readSite()->suspicious))->toBe([['scripts', [$post]]]);
+});
+
 it('reports a source database it cannot read', function () {
     config()->set('database.connections.wordpress', ['driver' => 'sqlite', 'database' => '/nonexistent/wordpress.sqlite']);
     app('db')->purge('wordpress');

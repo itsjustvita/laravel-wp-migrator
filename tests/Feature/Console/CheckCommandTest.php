@@ -148,3 +148,28 @@ it('reads the administrators with their registration date', function () {
         ['id' => $old, 'login' => 'old', 'email' => 'old@example.com', 'registered' => null],
     ]);
 });
+
+it('lists suspicious content as signs of a hacked site', function () {
+    $site = $this->source();
+    $site->option('home', 'https://old.example.com');
+    $post = $site->post(['post_content' => '<script src="https://evil.example/x.js"></script>']);
+    $site->option('sso_secret', 'eval(base64_decode("x"))');
+
+    expect(Artisan::call('wp:check'))->toBe(0);
+
+    expect(Artisan::output())
+        ->toMatch('/Suspicious content.*signs of a hacked site/')
+        ->toMatch("/Scripts in the content \\.+ 1 post \\(ID {$post}\\); from evil\\.example/")
+        ->toMatch('/Code in options \.+ 1 option: sso_secret/')
+        ->toContain('The import keeps HTML as it is.')
+        ->not->toContain('nothing found');
+});
+
+it('says when nothing suspicious was found', function () {
+    $this->source()->option('home', 'https://old.example.com');
+
+    Artisan::call('wp:check');
+
+    expect(Artisan::output())->toMatch('/Content, options and uploads \.+ nothing found/')
+        ->not->toContain('The import keeps HTML as it is.');
+});

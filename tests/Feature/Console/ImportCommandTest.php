@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use ItsJustVita\WpMigrator\Facades\WpMigrator;
 use ItsJustVita\WpMigrator\Import\ImportContext;
@@ -101,4 +102,17 @@ it('fails when rows could not be imported', function () {
         ->assertFailed();
 
     expect(Post::count())->toBe(1);
+});
+
+it('counts the suspicious content in the summary', function () {
+    $this->source()->post(['post_content' => '<script>x()</script><iframe src="https://casino.example/"></iframe>']);
+
+    Artisan::call('wp:import', ['--only' => 'posts']);
+
+    expect(Artisan::output())->toMatch('/Suspicious content \.+ 2/');
+
+    $this->source()->table('posts')->update(['post_content' => 'Clean now']);
+    Artisan::call('wp:import', ['--only' => 'posts']);
+
+    expect(Artisan::output())->toMatch('/Suspicious content \.+ 0/');
 });

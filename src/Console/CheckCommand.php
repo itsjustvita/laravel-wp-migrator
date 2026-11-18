@@ -6,6 +6,7 @@ namespace ItsJustVita\WpMigrator\Console;
 
 use Illuminate\Config\Repository;
 use Illuminate\Console\Command;
+use ItsJustVita\WpMigrator\Detection\Suspicious\SuspiciousContent;
 use ItsJustVita\WpMigrator\Detection\UnsupportedContentDetector;
 use ItsJustVita\WpMigrator\Source\ExcludedUsers;
 use ItsJustVita\WpMigrator\Source\SourceStats;
@@ -28,6 +29,7 @@ class CheckCommand extends Command
         UnsupportedContentDetector $detector,
         Repository $config,
         ExcludedUsers $excluded,
+        SuspiciousContent $suspicious,
     ): int {
         $this->newLine();
         $this->line('<options=bold> Source</>');
@@ -41,6 +43,7 @@ class CheckCommand extends Command
 
         $this->printCounts($stats);
         $this->printAdministrators($stats, $excluded);
+        $this->printSuspicious($suspicious);
         $this->printFindings($detector);
 
         return self::SUCCESS;
@@ -195,6 +198,26 @@ class CheckCommand extends Command
 
         $this->line(' <fg=gray>A hacked site can hold an attacker\'s account, which would be imported with a working password.</>');
         $this->line(' <fg=gray>Leave such accounts out with wp-migrator.users.excluded.</>');
+    }
+
+    private function printSuspicious(SuspiciousContent $suspicious): void
+    {
+        $this->newLine();
+        $this->line('<options=bold> Suspicious content</> <fg=gray>(signs of a hacked site)</>');
+
+        $findings = $suspicious->findings();
+
+        if ($findings === []) {
+            $this->components->twoColumnDetail('Content, options and uploads', '<fg=green>nothing found</>');
+
+            return;
+        }
+
+        foreach ($findings as $finding) {
+            $this->components->twoColumnDetail(sprintf('<fg=red>%s</>', $finding->label), sprintf('<fg=red>%s</>', $finding->summary()));
+        }
+
+        $this->line(' <fg=gray>The import keeps HTML as it is. Check these before the import; the report and wp:inventory explain each one.</>');
     }
 
     private function printFindings(UnsupportedContentDetector $detector): void

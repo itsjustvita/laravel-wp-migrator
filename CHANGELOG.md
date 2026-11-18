@@ -2,6 +2,16 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses [Semantic Versioning](https://semver.org/). Since 1.0, breaking changes to the public API come only with a new major version; the README lists what the public API covers.
 
+## [Unreleased]
+
+### Added
+
+- `wp:check`, the import report and the migration plan list signs of a hacked site: scripts, event handlers, links that run script, frames from unknown sites, hidden links and obfuscated code in the content that is imported, including Elementor data; code in options; and program files in the uploads. Nothing is changed; each finding names the posts, options or files to check.
+
+### Changed
+
+- The media import and the check of the uploads share one list of program file extensions.
+
 ## [1.2.0] - 2026-11-18
 
 ### Added
@@ -60,6 +70,7 @@ The first public version.
 - The theme inventory and the migration plan generator.
 - Content of page builders, WooCommerce, multilingual plugins and multisite installations is detected and reported, but not migrated.
 
+[Unreleased]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v0.1.0...v1.0.0

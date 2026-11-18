@@ -9,6 +9,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Connection;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Model;
+use ItsJustVita\WpMigrator\Detection\Suspicious\SuspiciousContent;
 use ItsJustVita\WpMigrator\Detection\UnsupportedContentDetector;
 use ItsJustVita\WpMigrator\Import\Importers\CommentImporter;
 use ItsJustVita\WpMigrator\Import\Importers\Importer;
@@ -54,6 +55,7 @@ class ImportRunner
         private readonly Container $container,
         private readonly ImportMap $map,
         private readonly UnsupportedContentDetector $detector,
+        private readonly SuspiciousContent $suspicious,
         private readonly DatabaseManager $databases,
         private readonly Repository $config,
     ) {}
@@ -64,6 +66,7 @@ class ImportRunner
 
         $report = new ImportReport($options->dryRun);
         $report->addFindings($this->detector->findings());
+        $report->addSuspicious($this->suspicious->findings());
 
         if ($options->since !== null) {
             $report->note('Posts and media modified since '.$options->since->utc()->toDateTimeString().' UTC');

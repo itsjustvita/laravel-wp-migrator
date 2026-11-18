@@ -77,7 +77,9 @@ it('imports the fixture site without errors or open references', function () {
         ->and($report->warnings())->toBe([])
         ->and(array_keys($report->unknownShortcodes()))->toBe(['contact-form-7'])
         ->and(array_keys($report->unknownBlocks()))->toBe(['acme/hero', 'elementor/acme-hero'])
-        ->and(array_map(fn ($finding) => $finding->key, $report->findings()))->toBe(['elementor-theme-builder']);
+        ->and(array_map(fn ($finding) => $finding->key, $report->findings()))->toBe(['elementor-theme-builder'])
+        // A clean site built with WP itself shows no signs of a hack.
+        ->and($report->suspicious())->toBe([]);
 });
 
 it('imports classic and block content', function () {

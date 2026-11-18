@@ -6,6 +6,7 @@ namespace ItsJustVita\WpMigrator\Import;
 
 use Carbon\CarbonImmutable;
 use ItsJustVita\WpMigrator\Detection\Finding;
+use ItsJustVita\WpMigrator\Detection\Suspicious\SuspiciousContent;
 use Throwable;
 
 /**
@@ -39,6 +40,9 @@ final class ImportReport
 
     /** @var list<Finding> */
     private array $findings = [];
+
+    /** @var list<Finding> */
+    private array $suspicious = [];
 
     /** @var list<string> */
     private array $notes = [];
@@ -145,6 +149,28 @@ final class ImportReport
                 $this->findings[] = $finding;
             }
         }
+    }
+
+    /**
+     * Signs of a hacked site, found before the import.
+     *
+     * @param  list<Finding>  $findings
+     */
+    public function addSuspicious(array $findings): void
+    {
+        foreach ($findings as $finding) {
+            if ($finding->detected) {
+                $this->suspicious[] = $finding;
+            }
+        }
+    }
+
+    /**
+     * @return list<Finding>
+     */
+    public function suspicious(): array
+    {
+        return $this->suspicious;
     }
 
     public function note(string $note): void
@@ -272,6 +298,11 @@ final class ImportReport
                 self::OUTCOMES,
             )).' |';
         }
+
+        $this->section($lines, 'Suspicious content', array_map(
+            fn (Finding $finding): string => sprintf('**%s**: %s. %s', $finding->label, $finding->summary(), SuspiciousContent::advice($finding->key)),
+            $this->suspicious,
+        ));
 
         $this->section($lines, 'Unsupported content', array_map(
             fn (Finding $finding): string => sprintf('**%s**: %s', $finding->label, $finding->summary()),

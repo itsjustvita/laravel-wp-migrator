@@ -78,7 +78,7 @@ Without `--theme` it looks for the active theme, and its parent if it is a child
 
 The plan is a Markdown checklist for whoever builds the new frontend:
 
-- the administrator accounts to review before the import
+- the administrator accounts to review before the import, and signs of a hack in the content, the options and the uploads
 - routes and views for the front page, every post type and its archive, pages with their own template, page templates with the posts that use them, and the category, tag, author and custom taxonomy archives, following the URL patterns in the configuration
 - post types without pages of their own, such as form entries, which you may want to leave out of the import
 - components for headers, footers, sidebars and template parts, and the menu locations with the menus assigned to them
@@ -87,6 +87,16 @@ The plan is a Markdown checklist for whoever builds the new frontend:
 - scripts and styles to move to Vite, the theme features, and the content that is not migrated
 
 The theme is never run. PHP files are parsed, and only values written literally in the code are read, so a `register_post_type($type)` with a computed name is listed at the end of the plan to check by hand. When the source database cannot be read, the plan is written from the theme alone.
+
+### Suspicious content
+
+Agencies are often asked to move a site after it was hacked. The import keeps the HTML of the content as it is, so injected code would come along. `wp:check`, the import report and the migration plan therefore list signs of a hack:
+
+- in the content that is imported, including Elementor data: scripts with the hosts they load from, event handlers such as `onerror`, links that run script (`javascript:`, `vbscript:`, `data:text/html`), frames from sites other than common players and maps, links hidden with CSS, and obfuscated code such as `eval(`, `atob(` or `base64_decode(`, except inside `<pre>` and `<code>`
+- code in options, which are not imported but often hold a backdoor's settings
+- program files such as `.php` in the uploads directory, which the import never copies
+
+Nothing is changed or removed: each finding names the posts, options or files to check. Clean them up in WP or in the database copy before the import, and check the administrator accounts `wp:check` lists as well.
 
 ### Content
 
@@ -313,7 +323,7 @@ class EventMapper implements PostMapper
 ## Migrating a site, step by step
 
 1. **Prepare.** Get a copy of the WP database and the `wp-content/uploads` directory, ideally with the theme next to it in `wp-content/themes`. Import the dump into a database the new application can read, add the connection, set `source.uploads_path`, and run `php artisan wp:check`. It shows what the site contains and which content the package does not migrate.
-2. **Plan.** Run `php artisan wp:inventory` and read `docs/wp-migration-plan.md`. Before the first import, check the administrator accounts it lists, leave out post types that hold data rather than content, and decide on the URL patterns in the `urls` section of the configuration: links in the content, menu items and redirects are built from them.
+2. **Plan.** Run `php artisan wp:inventory` and read `docs/wp-migration-plan.md`. Before the first import, check the administrator accounts and the suspicious content it lists, leave out post types that hold data rather than content, and decide on the URL patterns in the `urls` section of the configuration: links in the content, menu items and redirects are built from them.
 3. **Import.** Run `php artisan wp:import --dry-run`, read the report in `storage/logs`, then run `php artisan wp:import`. The report lists unknown shortcodes, blocks without a view and links it could not resolve.
 4. **Build the frontend.** Work through the plan: routes, views, components, shortcode handlers and block views. Run `php artisan wp:import --force` after changing handlers, mappers or URL patterns, so unchanged rows are mapped again.
 5. **Import the changes.** Shortly before going live, take a fresh copy of the database and the uploads and run `php artisan wp:import` again. It only brings over what changed. Posts that were deleted or trashed on the old site in the meantime stay in the new one, so remove them by hand.
