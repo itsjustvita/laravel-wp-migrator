@@ -6,6 +6,10 @@ Move a WP site's content into a clean Laravel application without losing data, U
 
 The package migrates posts, pages, custom post types, media, taxonomies, menus, users and comments into its own schema, parses block, classic and Elementor content into a renderable structure, imports SEO meta and custom fields, keeps old URLs alive through redirects, and lets existing users keep their passwords. It does not convert theme or plugin code. Instead, it produces an inventory of the theme and a migration plan for rebuilding the frontend in Blade.
 
+![wp:check on a demo site with planted traces of a hack: the administrators, suspicious content and content that is not migrated](https://raw.githubusercontent.com/itsjustvita/laravel-wp-migrator/main/art/wp-check.gif)
+
+*`php artisan wp:check` on a demo site with planted traces of a hack.*
+
 > **Status:** stable since 1.0. Breaking changes to the public API come only with a new major version, see [Versioning](#versioning) and the [changelog](CHANGELOG.md).
 
 ## Requirements
