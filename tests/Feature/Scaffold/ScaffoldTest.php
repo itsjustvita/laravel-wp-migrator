@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\View;
 use ItsJustVita\WpMigrator\Inventory\Frontend;
 use ItsJustVita\WpMigrator\Inventory\SiteFacts;
 use ItsJustVita\WpMigrator\Inventory\Theme\PostTypeDefinition;
@@ -171,7 +174,7 @@ it('writes views for blocks without one', function () {
     expect($files['resources/views/vendor/wp-migrator/blocks/elementor/acme-hero.blade.php'])
         ->toContain('The Elementor widget "acme-hero", used 3 times.')
         ->toContain('$attrs holds its settings: hero_title, cards (list), link (object), color.')
-        ->toContain("<div class=\"hero_title\">{!! \$attrs['hero_title'] ?? '' !!}</div>")
+        ->toContain("<div class=\"hero_title\">{{ \$attrs['hero_title'] ?? '' }}</div>")
         ->not->toContain('@foreach')
         ->and($files['resources/views/vendor/wp-migrator/blocks/elementor/acme-card.blade.php'])
         ->toContain('used once')
@@ -179,4 +182,75 @@ it('writes views for blocks without one', function () {
         ->toContain('@foreach ($attrs as $key => $value)')
         ->and($files['resources/views/vendor/wp-migrator/blocks/acme/teaser.blade.php'])->toContain('{!! $content !!}')
         ->and($files['resources/views/vendor/wp-migrator/blocks/latest-posts.blade.php'])->toContain('The block "core/latest-posts", used 2 times.');
+});
+
+it('keeps names from the old site from turning into code', function () {
+    $evil = "x'); system('id'); //";
+    config()->set('wp-migrator.urls.patterns', ['page' => '/{path}', 'post' => "/blog's/{slug}", '*' => '/{type}/{slug}']);
+    config()->set('wp-migrator.urls.term_patterns', ['genre' => '/genre/{slug}', "genre'); system('id" => '/g/{slug}']);
+
+    $scaffold = scaffold(
+        [
+            'templates' => [
+                new Template('index.php', 'index'),
+                new Template("archive.php --}} @php system('id') @endphp", 'archive'),
+                new Template('template-wide.php', 'custom', "Wide --}} @php system('id') @endphp", null, ['page']),
+                new Template('template-blank.php', 'custom', '!!!', null, ['page']),
+                new Template("tpl --}} @php system('id') @endphp.php", 'custom', 'Other', null, ['page']),
+                new Template('page-contact.php', 'page', null, '../../evil'),
+            ],
+            'postTypes' => [
+                new PostTypeDefinition('book', 'Books {{ system("id") }} @php echo 1; @endphp', true, true, false, null, [], 'functions.php'),
+                new PostTypeDefinition($evil, 'Films', true, true, false, null, [], 'functions.php'),
+            ],
+            'taxonomies' => [new TaxonomyDefinition("genre'); system('id", 'Genres', ['book'], true, null, 'functions.php')],
+            'menuLocations' => ['primary" :x="system(\'id\')' => 'Main', 'footer --}}{{ system("id") }}' => 'Footer'],
+        ],
+        ['taxonomies' => ["genre'); system('id" => 1], 'blocks' => [
+            'elementor/acme-hero' => ['count' => 1, 'post_ids' => [1]],
+            "acme/teaser'); system('id') ?>" => ['count' => 1, 'post_ids' => [2]],
+        ]],
+        ['elementor/acme-hero' => ['hero_title' => 'text', "a'] ?? ''; system('id'); //" => 'text']],
+    );
+    $files = $scaffold->files();
+
+    lintScaffold($files);
+
+    // Compiling resolves the generated components, so they have to be views.
+    $root = sys_get_temp_dir().'/wp-migrator-hostile-'.uniqid();
+
+    foreach ($files as $path => $content) {
+        File::ensureDirectoryExists(dirname($root.'/'.$path));
+        File::put($root.'/'.$path, $content);
+    }
+
+    View::addLocation($root.'/resources/views');
+
+    foreach ($files as $path => $content) {
+        if (str_ends_with($path, '.blade.php')) {
+            preg_match_all('/<\?php.*?\?>/s', Blade::compileString($content), $blocks);
+            $code = implode("\n", $blocks[0]);
+
+            expect(str_contains($code, 'system('))->toBeFalse($path)
+                ->and(str_contains($code, 'echo 1'))->toBeFalse($path);
+        } else {
+            $calls = array_filter(token_get_all($content), fn (mixed $token): bool => is_array($token) && $token[0] === T_STRING && $token[1] === 'system');
+
+            expect($calls)->toBe([], $path);
+        }
+    }
+
+    File::deleteDirectory($root);
+
+    expect($scaffold->notes())
+        ->toContain('The post type "x\'); system(\'id\'); //" was left out: its name cannot be used in code safely.')
+        ->toContain('The taxonomy "genre\'); system(\'id" was left out: its name cannot be used in code safely.')
+        ->toContain('The block "acme/teaser\'); system(\'id\') ?>" was left out: its name cannot be used in code safely.')
+        ->toContain('The menu location "primary" :x="system(\'id\')" was left out: its name cannot be used in code safely.')
+        ->and($files['routes/wp.php'])->not->toContain('system')->toContain("Route::get('/blog\\'s/{slug}'")
+        ->and($files['resources/views/books/index.blade.php'])->toContain("@section('title')\n    Books &#123;&#123; system(&quot;id&quot;) &#125;&#125; &#64;php echo 1; &#64;endphp\n@endsection")
+        ->and($files['resources/views/components/wp/header.blade.php'])->toContain('<x-wp.menu location="primary" />')
+        ->and($files['resources/views/components/wp/footer.blade.php'])->not->toContain('x-wp.menu')
+        ->and($files['resources/views/vendor/wp-migrator/blocks/elementor/acme-hero.blade.php'])->not->toContain('system')
+        ->and(array_filter(array_keys($files), fn (string $path): bool => str_contains($path, 'evil') || str_ends_with($path, '/.blade.php')))->toBe([]);
 });

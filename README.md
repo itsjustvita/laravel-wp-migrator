@@ -109,7 +109,7 @@ It reads the theme and the source database like `wp:inventory`, and the imported
 - the layout `layouts/wp` with the SEO tags, a layout for each page template, and components for the header, the footer and the menus of the theme's locations
 - a view for each block without one; for Elementor widgets it lists the settings the imported widgets hold
 
-Run it after the import. The files belong to your application: change them as you like, `wp:scaffold` keeps files that exist unless you pass `--force`. Remove the default route for `/` from `routes/web.php` so the front page shows. Author archives are not scaffolded, since the imported users keep no slug to find them by.
+Run it after the import. The files belong to your application: change them as you like, `wp:scaffold` keeps files that exist unless you pass `--force`. Names from the old site end up in code, and a hacked site controls them, so post types, taxonomies, menu locations and widget settings whose names do not match the key formats of WP are left out with a note, and every other text is escaped. The views of widgets print their fields escaped; print fields whose HTML you trust with `{!! !!}`. Remove the default route for `/` from `routes/web.php` so the front page shows. Author archives are not scaffolded, since the imported users keep no slug to find them by.
 
 ### Suspicious content
 

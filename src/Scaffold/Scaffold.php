@@ -14,6 +14,12 @@ use ItsJustVita\WpMigrator\Inventory\Theme\Template;
  * plan, components for the menus, and views for blocks without one. The
  * code belongs to the application from then on; nothing here is used at
  * runtime.
+ *
+ * Names and texts from the old site end up in PHP and Blade files, and a
+ * hacked site controls them. So names that are used as code must match the
+ * key formats of WP, and everything else is escaped where it is written:
+ * PHP strings with var_export, Blade text with entities for {, } and @,
+ * and comments so they cannot be closed early.
  */
 final class Scaffold
 {
@@ -25,6 +31,17 @@ final class Scaffold
         'month' => '[0-9]{2}',
         'day' => '[0-9]{2}',
     ];
+
+    /** Post types and taxonomies, as WP stores their keys. */
+    private const string KEY = '/^[a-z0-9_-]{1,32}$/';
+
+    private const string LOCATION = '/^[A-Za-z0-9_-]{1,64}$/';
+
+    private const string BLOCK = '/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?$/';
+
+    private const string ATTRIBUTE = '/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/';
+
+    private const string SLUG = '/^[\p{L}\p{N}_-]{1,200}$/u';
 
     /** @var list<string> */
     private array $notes = [];
@@ -50,6 +67,10 @@ final class Scaffold
         $terms = [];
 
         foreach ($this->frontend->termArchives() as $term) {
+            if (! $this->usable((string) $term->subject, self::KEY, 'taxonomy')) {
+                continue;
+            }
+
             if ($term->uri !== null) {
                 $terms[] = $term;
             } else {
@@ -82,12 +103,12 @@ final class Scaffold
         }
 
         foreach ($this->frontend->specific() as $specific) {
-            if (isset($singles[(string) $specific->subject])) {
+            if (isset($singles[(string) $specific->subject]) && preg_match(self::SLUG, (string) $specific->slug) === 1) {
                 $files[$specific->viewPath()] = $this->show($specific);
             }
         }
 
-        foreach ($this->frontend->layouts() as $layout) {
+        foreach ($this->layouts() as $layout) {
             $files[$layout->viewPath()] = $this->templateLayout($layout);
         }
 
@@ -106,7 +127,9 @@ final class Scaffold
         }
 
         foreach ($this->frontend->site->blocks as $name => $usage) {
-            $files[$this->blockViewPath($name)] = $this->blockView($name, $usage['count']);
+            if ($this->usable($name, self::BLOCK, 'block')) {
+                $files[$this->blockViewPath($name)] = $this->blockView($name, $usage['count']);
+            }
         }
 
         if ($this->frontend->authorArchive() !== null) {
@@ -136,6 +159,10 @@ final class Scaffold
         $singles = [];
 
         foreach ($this->frontend->routedTypes() as $type) {
+            if (! $this->usable($type, self::KEY, 'post type')) {
+                continue;
+            }
+
             $single = $this->frontend->single($type);
 
             if ($single->uri === null) {
@@ -148,6 +175,31 @@ final class Scaffold
         }
 
         return $singles;
+    }
+
+    /**
+     * Whether a name from the old site can be used in code. A hacked site
+     * can name a post type or block so that it would inject code.
+     */
+    private function usable(string $name, string $pattern, string $what): bool
+    {
+        if (preg_match($pattern, $name) === 1) {
+            return true;
+        }
+
+        $this->notes[] = sprintf('The %s "%s" was left out: its name cannot be used in code safely.', $what, $this->shown($name));
+
+        return false;
+    }
+
+    /**
+     * The layouts of the page templates, without those whose name gives no file name.
+     *
+     * @return list<FrontendItem>
+     */
+    private function layouts(): array
+    {
+        return array_values(array_filter($this->frontend->layouts(), fn (FrontendItem $layout): bool => $layout->view !== 'layouts.'));
     }
 
     /**
@@ -211,21 +263,21 @@ final class Scaffold
             }
 
             $seen[$key] = $name;
-            $line = sprintf("Route::get('%s', [WpController::class, '%s'])", $uri, $action);
+            $line = sprintf('Route::get(%s, [WpController::class, %s])', $this->php($uri), $this->php($action));
 
             foreach ($defaults as $parameter => $value) {
-                $line .= sprintf("->defaults('%s', '%s')", $parameter, $value);
+                $line .= sprintf('->defaults(%s, %s)', $this->php($parameter), $this->php($value));
             }
 
             preg_match_all('/\{([a-z]+)\}/', $uri, $parameters);
 
             foreach ($parameters[1] as $parameter) {
                 if (isset(self::WHERE[$parameter])) {
-                    $line .= sprintf("->where('%s', '%s')", $parameter, self::WHERE[$parameter]);
+                    $line .= sprintf('->where(%s, %s)', $this->php($parameter), $this->php(self::WHERE[$parameter]));
                 }
             }
 
-            $lines[] = $line.sprintf("->name('%s');", $name);
+            $lines[] = $line.sprintf('->name(%s);', $this->php($name));
         }
 
         return <<<PHP
@@ -263,7 +315,7 @@ final class Scaffold
 
         $layouts = [];
 
-        foreach ($this->frontend->layouts() as $layout) {
+        foreach ($this->layouts() as $layout) {
             $layouts[(string) $layout->subject] = $layout->view;
         }
 
@@ -579,7 +631,7 @@ final class Scaffold
 
     private function header(): string
     {
-        $locations = array_keys($this->frontend->theme->menuLocations);
+        $locations = $this->locations();
         $location = $locations[0] ?? 'primary';
         $from = $this->from($this->frontend->find('partial', 'header'));
 
@@ -599,7 +651,7 @@ final class Scaffold
         $from = $this->from($this->frontend->find('partial', 'footer'));
         $menus = '';
 
-        foreach (array_keys($this->frontend->theme->menuLocations) as $location) {
+        foreach ($this->locations() as $location) {
             if (str_contains($location, 'footer')) {
                 $menus .= "\n    <x-wp.menu location=\"{$location}\" />\n";
             }
@@ -700,7 +752,7 @@ final class Scaffold
 
     private function show(FrontendItem $item): string
     {
-        $what = $item->kind === 'specific' ? 'The '.($item->subject === 'page' ? 'page' : 'post').' "'.$item->slug.'"' : 'A single post of the type "'.$item->subject.'"';
+        $what = $this->comment($item->kind === 'specific' ? 'The '.($item->subject === 'page' ? 'page' : 'post').' "'.$item->slug.'"' : 'A single post of the type "'.$item->subject.'"');
         $from = $this->from($item->template);
         $date = $item->subject === 'page' ? '' : <<<'BLADE'
 
@@ -732,13 +784,15 @@ final class Scaffold
     private function index(FrontendItem $archive): string
     {
         $from = $this->from($archive->template);
-        $label = $this->escapeBlade($archive->label);
+        $label = $this->text($archive->label);
 
         return <<<BLADE
             {{-- The archive of the post type "{$archive->subject}"{$from}. Generated by php artisan wp:scaffold. --}}
             @extends(\$layout ?? 'layouts.wp')
 
-            @section('title', '{$this->quote($archive->label)}')
+            @section('title')
+                {$label}
+            @endsection
 
             @section('content')
                 <h1>{$label}</h1>
@@ -815,8 +869,8 @@ final class Scaffold
         $class = 'template-'.basename(str_replace('.', '/', $layout->view));
 
         return <<<BLADE
-            {{-- The layout of the page template "{$this->templateName($layout)}"{$from}, for the posts whose
-                 posts.template is "{$layout->subject}". Generated by php artisan wp:scaffold. --}}
+            {{-- The layout of the page template "{$this->comment($this->templateName($layout))}"{$from}, for the posts whose
+                 posts.template is "{$this->comment((string) $layout->subject)}". Generated by php artisan wp:scaffold. --}}
             @extends('layouts.wp')
 
             @section('main-class', '{$class}')
@@ -838,7 +892,11 @@ final class Scaffold
         }
 
         $widget = substr($name, 10);
-        $attributes = $this->blockAttributes[$name] ?? [];
+        $attributes = array_filter(
+            $this->blockAttributes[$name] ?? [],
+            fn (string $key): bool => preg_match(self::ATTRIBUTE, $key) === 1,
+            ARRAY_FILTER_USE_KEY,
+        );
         $known = $attributes === [] ? 'its settings' : 'its settings: '.implode(', ', array_map(
             fn (string $key, string $kind): string => $kind === 'text' || $kind === 'value' ? $key : $key.' ('.$kind.')',
             array_keys($attributes),
@@ -848,7 +906,7 @@ final class Scaffold
 
         foreach ($attributes as $key => $kind) {
             if ($kind === 'text') {
-                $fields .= sprintf("    <div class=\"%s\">{!! \$attrs['%s'] ?? '' !!}</div>\n", $key, $key);
+                $fields .= sprintf("    <div class=\"%s\">{{ \$attrs[%s] ?? '' }}</div>\n", $key, $this->php($key));
             }
         }
 
@@ -865,7 +923,8 @@ final class Scaffold
 
         return <<<BLADE
             {{-- The Elementor widget "{$widget}", used {$times}. Generated by php artisan wp:scaffold.
-                 \$attrs holds {$known}. Replace this with your markup. --}}
+                 \$attrs holds {$known}. Replace this with your markup. Text is printed escaped;
+                 print fields whose HTML you trust with {!! !!} instead. --}}
             <div class="elementor-widget-{$widget}">
             {$fields}</div>
 
@@ -890,7 +949,7 @@ final class Scaffold
             return '';
         }
 
-        return ', from '.$template->path.($template->source === 'child' ? ' of the child theme' : ' of the theme');
+        return ', from '.$this->comment($template->path).($template->source === 'child' ? ' of the child theme' : ' of the theme');
     }
 
     /**
@@ -919,13 +978,49 @@ final class Scaffold
         return implode("\n".$indent, $lines);
     }
 
-    private function quote(string $value): string
+    /**
+     * The menu locations of the theme whose names can be used in a view.
+     *
+     * @return list<string>
+     */
+    private function locations(): array
     {
-        return str_replace(['\\', "'"], ['\\\\', "\\'"], $value);
+        return array_values(array_filter(
+            array_map(strval(...), array_keys($this->frontend->theme->menuLocations)),
+            fn (string $location): bool => $this->usable($location, self::LOCATION, 'menu location'),
+        ));
     }
 
-    private function escapeBlade(string $value): string
+    /**
+     * A PHP string literal.
+     */
+    private function php(string $value): string
     {
-        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return var_export($value, true);
+    }
+
+    /**
+     * Text in a Blade view: HTML entities, also for the characters Blade
+     * would compile, so nothing from the old site turns into code.
+     */
+    private function text(string $value): string
+    {
+        return strtr(htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ['{' => '&#123;', '}' => '&#125;', '@' => '&#64;']);
+    }
+
+    /**
+     * Text inside a Blade comment, which must not end the comment.
+     */
+    private function comment(string $value): string
+    {
+        return str_replace('--}}', '- -}}', $this->shown($value));
+    }
+
+    /**
+     * A name as it may be shown: without control characters, and short.
+     */
+    private function shown(string $value): string
+    {
+        return mb_substr((string) preg_replace('/[\x00-\x1F\x7F]/u', '', $value), 0, 120);
     }
 }

@@ -6,7 +6,7 @@ All notable changes to this package are documented here. The format follows [Kee
 
 ### Added
 
-- `wp:scaffold` turns the migration plan into a working start for the frontend: routes from the URL patterns, a controller for the front page, single posts and pages, archives, taxonomy archives and search, a helper for links, views under the names the plan uses, layouts for the page templates, components for the header, the footer and the menus, and views for blocks without one, listing the settings Elementor widgets hold. Existing files are kept unless `--force` is passed.
+- `wp:scaffold` turns the migration plan into a working start for the frontend: routes from the URL patterns, a controller for the front page, single posts and pages, archives, taxonomy archives and search, a helper for links, views under the names the plan uses, layouts for the page templates, components for the header, the footer and the menus, and views for blocks without one, listing the settings Elementor widgets hold. Existing files are kept unless `--force` is passed. Names from the old site that end up in code, such as post types, taxonomies, menu locations and widget settings, must match the key formats of WP or are left out with a note, and all other text from the old site is escaped, so a hacked site cannot inject code into the generated files. Widget fields are printed escaped.
 - `wp:inventory` and `wp:scaffold` read which page WP shows on the front page.
 
 ### Changed

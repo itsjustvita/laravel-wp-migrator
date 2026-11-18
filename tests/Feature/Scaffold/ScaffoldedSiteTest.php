@@ -83,6 +83,8 @@ it('serves the imported content through the generated code', function () {
 
     file_put_contents($root.'/resources/views/pages/contact.blade.php', 'CONTACT VIEW {{ $post->title }}');
 
+    // The web middleware encrypts the session cookie.
+    config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
     require_once $root.'/app/Http/Controllers/WpController.php';
     require_once $root.'/app/Support/WpUrl.php';
     Route::middleware('web')->group($root.'/routes/wp.php');
@@ -118,9 +120,10 @@ it('serves the imported content through the generated code', function () {
     $this->get('/contact')->assertOk()->assertSee('CONTACT VIEW Contact');
     $this->get('/b%C3%BCro')->assertOk()->assertSee('Büro');
     $this->get('/blog')->assertOk()->assertSee('href="'.url('/blog/hello').'"', false);
-    $this->get('/blog/hello')->assertOk()->assertSee('<div class="hero_title">Big <em>news</em></div>', false)->assertDontSee('red');
+    $this->get('/blog/hello')->assertOk()->assertSee('<div class="hero_title">Big &lt;em&gt;news&lt;/em&gt;</div>', false)->assertDontSee('red');
     $this->get('/blog/not-ready')->assertNotFound();
     $this->get('/events')->assertOk()->assertSee('href="'.url('/events/77').'"', false);
+    expect($this->get('/events')->getContent())->toMatch('#<title>\s*Events\s*</title>#');
     $this->get('/events/77')->assertOk()->assertSee('Summer gig')->assertSee('<time datetime=', false);
     $this->get('/events/78')->assertNotFound();
     $this->get('/blog/category/news')->assertOk()->assertSee('<h1>News</h1>', false)->assertSee('Hello world');

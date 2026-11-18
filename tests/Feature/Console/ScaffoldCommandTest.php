@@ -87,7 +87,7 @@ it('lists the settings the imported widgets hold', function () {
 
     expect(file_get_contents($this->root.'/resources/views/vendor/wp-migrator/blocks/elementor/acme-hero.blade.php'))
         ->toContain('$attrs holds its settings: cards (list), color, hero_title, link (object).')
-        ->toContain("<div class=\"hero_title\">{!! \$attrs['hero_title'] ?? '' !!}</div>")
+        ->toContain("<div class=\"hero_title\">{{ \$attrs['hero_title'] ?? '' }}</div>")
         ->not->toContain('_margin');
 });
 
