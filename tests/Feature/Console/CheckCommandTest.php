@@ -53,6 +53,33 @@ it('prints counts per post type, taxonomy, users and media', function () {
     expect(Artisan::output())->not->toContain('Administrators');
 });
 
+it('lists the content the import handles otherwise or leaves out at the end', function () {
+    $site = $this->source();
+    $site->option('home', 'https://old.example.com');
+    $site->post(['post_type' => 'acf-field']);
+    $site->post(['post_type' => 'acf-field']);
+    $site->post(['post_type' => 'wp_block']);
+    $site->post(['post_type' => 'nav_menu_item']);
+    $site->attachment();
+    $site->page(['post_title' => 'About']);
+    $site->term('nav_menu', 'Main');
+    $site->term('post_translations', 'pll_1');
+    $site->term('category', 'News');
+
+    Artisan::call('wp:check');
+    $output = Artisan::output();
+
+    expect($output)
+        ->toMatch('/page \(publish 1\) \.+ 1 *\n *category \(taxonomy\) \.+ 1 *\n *Users \.+ \d+ *\n *Media \(attachments\) \.+ 1 *\n *acf-field/')
+        ->toMatch('/acf-field \(publish 2\) \.+ 2, not imported/')
+        ->toMatch('/wp_block \(publish 1\) \.+ 1, inserted where used/')
+        ->toMatch('/nav_menu_item \(publish 1\) \.+ 1, imported as menu items/')
+        ->toMatch('/attachment \(inherit 1\) \.+ 1, imported as media/')
+        ->toMatch('/nav_menu \(taxonomy\) \.+ 1, imported as menus/')
+        ->toMatch('/post_translations \(taxonomy\) \.+ 1, not imported/')
+        ->and(substr_count($output, 'acf-field'))->toBe(1);
+});
+
 it('warns about a missing uploads path without failing', function () {
     $this->source()->option('home', 'https://old.example.com');
     config()->set('wp-migrator.source.uploads_path', '/nonexistent/uploads');

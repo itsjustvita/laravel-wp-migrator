@@ -15,6 +15,15 @@ use Throwable;
 
 class CheckCommand extends Command
 {
+    /** What happens to post types and taxonomies that are not imported as posts or terms. */
+    private const array HANDLED_OTHERWISE = [
+        'attachment' => 'imported as media',
+        'nav_menu_item' => 'imported as menu items',
+        'wp_navigation' => 'imported as menus',
+        'wp_block' => 'inserted where used',
+        'nav_menu' => 'imported as menus',
+    ];
+
     private const array REQUIRED_TABLES = [
         'posts', 'postmeta', 'terms', 'term_taxonomy', 'term_relationships', 'users', 'usermeta', 'options',
     ];
@@ -41,7 +50,7 @@ class CheckCommand extends Command
         $siteUrl = $this->checkSiteUrl($db, $config);
         $this->checkUploads($config, $siteUrl);
 
-        $this->printCounts($stats);
+        $this->printCounts($stats, $config);
         $this->printAdministrators($stats, $excluded);
         $this->printSuspicious($suspicious);
         $this->printFindings($detector);
@@ -146,10 +155,18 @@ class CheckCommand extends Command
         $this->components->twoColumnDetail('Uploads', sprintf('<fg=green>readable</> %s', $path));
     }
 
-    private function printCounts(SourceStats $stats): void
+    /**
+     * The content that becomes posts and terms first; post types and
+     * taxonomies the import leaves out or handles otherwise at the end.
+     */
+    private function printCounts(SourceStats $stats, Repository $config): void
     {
         $this->newLine();
         $this->line('<options=bold> Content</>');
+
+        $excludedTypes = $config->array('wp-migrator.import.excluded_post_types');
+        $excludedTaxonomies = $config->array('wp-migrator.import.excluded_taxonomies');
+        $otherwise = [];
 
         foreach ($stats->postCounts() as $type => $statuses) {
             $breakdown = implode(', ', array_map(
@@ -158,15 +175,34 @@ class CheckCommand extends Command
                 $statuses,
             ));
 
+            if (in_array($type, $excludedTypes, true)) {
+                $otherwise[] = [sprintf('%s (%s)', $type, $breakdown), array_sum($statuses), $type];
+
+                continue;
+            }
+
             $this->components->twoColumnDetail(sprintf('%s <fg=gray>(%s)</>', $type, $breakdown), (string) array_sum($statuses));
         }
 
         foreach ($stats->taxonomyCounts() as $taxonomy => $count) {
+            if (in_array($taxonomy, $excludedTaxonomies, true)) {
+                $otherwise[] = [sprintf('%s (taxonomy)', $taxonomy), $count, $taxonomy];
+
+                continue;
+            }
+
             $this->components->twoColumnDetail(sprintf('%s <fg=gray>(taxonomy)</>', $taxonomy), (string) $count);
         }
 
         $this->components->twoColumnDetail('Users', (string) $stats->userCount());
         $this->components->twoColumnDetail('Media <fg=gray>(attachments)</>', (string) $stats->mediaCount());
+
+        foreach ($otherwise as [$label, $count, $name]) {
+            $this->components->twoColumnDetail(
+                sprintf('<fg=gray>%s</>', $label),
+                sprintf('<fg=gray>%d, %s</>', $count, self::HANDLED_OTHERWISE[$name] ?? 'not imported'),
+            );
+        }
     }
 
     private function printAdministrators(SourceStats $stats, ExcludedUsers $excluded): void
