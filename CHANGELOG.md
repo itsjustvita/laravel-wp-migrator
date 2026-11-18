@@ -6,7 +6,7 @@ All notable changes to this package are documented here. The format follows [Kee
 
 ### Added
 
-- Pages built with Elementor are converted from their Elementor data into blocks. Containers, sections and columns keep the layout, and the common widgets become core blocks: heading, text, image, button, video, divider, spacer, icon list, HTML, shortcode, image gallery, icon box, image box, testimonial, accordion, toggle and tabs. Global widgets and templates are replaced by their content. Other widgets become `elementor/<widget>` blocks with all their settings, ready for a view. Set `content.elementor` to `false` for the previous behaviour.
+- Pages built with Elementor are converted from their Elementor data into blocks. Containers, sections and columns keep the layout, and the common widgets become core blocks: heading, text, image, button, video, divider, spacer, icon list, HTML, shortcode, image gallery, icon box, image box, testimonial, accordion, toggle and tabs. Global widgets and templates are replaced by their content, up to 200 times per page and 10 levels deep. Other widgets become `elementor/<widget>` blocks with all their settings, ready for a view. Links that could run script are left out, and plain text fields are escaped. Set `content.elementor` to `false` for the previous behaviour.
 - A view for `core/details`.
 - `wp:check`, the report and the migration plan list templates of the Elementor theme builder, such as headers, footers and popups, as content that is not migrated. The migration plan says how many pages are converted from Elementor and lists their widgets without a view.
 

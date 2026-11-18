@@ -9,6 +9,7 @@ use ItsJustVita\WpMigrator\Content\Autop;
 use ItsJustVita\WpMigrator\Content\Blocks\Block;
 use ItsJustVita\WpMigrator\Source\Dto\MetaBag;
 use ItsJustVita\WpMigrator\Source\WpDatabase;
+use ItsJustVita\WpMigrator\Support\SafeUrl;
 use JsonException;
 
 /**
@@ -21,6 +22,9 @@ use JsonException;
  * becomes a block named elementor/<widget> with all its settings as
  * attributes, so a view can render it. The design (colors, fonts, spacing)
  * is not converted.
+ *
+ * Fields that hold HTML in Elementor keep it, like post content does; plain
+ * text fields are escaped, and links that could run script are left out.
  */
 class ElementorConverter
 {
@@ -33,11 +37,23 @@ class ElementorConverter
 
     private const string SPACER_UNITS = '/^(px|em|rem|vh|vw|%)$/';
 
+    /** Templates one page may expand, and how deeply they may nest. */
+    private const int MAX_EXPANSIONS = 200;
+
+    private const int MAX_NESTING = 10;
+
     /** @var Closure(string): void */
     private Closure $warn;
 
     /** @var array<int, true> templates being expanded, to stop cycles */
     private array $expanding = [];
+
+    private int $expansions = 0;
+
+    private bool $overBudget = false;
+
+    /** @var array<int, list<mixed>|null> decoded templates by ID */
+    private array $templates = [];
 
     public function __construct(
         private readonly Autop $autop,
@@ -67,6 +83,8 @@ class ElementorConverter
         }
 
         $this->warn = $warn;
+        $this->expansions = 0;
+        $this->overBudget = false;
 
         return $this->elements($elements);
     }
@@ -268,6 +286,10 @@ class ElementorConverter
             return [];
         }
 
+        if (! SafeUrl::isSafe($url)) {
+            return [];
+        }
+
         $id = is_numeric($image['id'] ?? null) && (int) $image['id'] > 0 ? (int) $image['id'] : null;
         $size = $this->text($settings, 'image_size');
         $size = $size === '' ? 'large' : $size;
@@ -296,7 +318,7 @@ class ElementorConverter
         $caption = ($settings['caption_source'] ?? null) === 'custom' ? $this->text($settings, 'caption') : '';
 
         if ($caption !== '') {
-            $html .= '<figcaption class="wp-element-caption">'.$caption.'</figcaption>';
+            $html .= '<figcaption class="wp-element-caption">'.$this->escape($caption).'</figcaption>';
         }
 
         return [new Block('core/image', $attrs, '<figure class="wp-block-image size-'.$this->escape($size).'">'.$html.'</figure>')];
@@ -335,7 +357,7 @@ class ElementorConverter
         if (isset(self::EMBEDS[$type])) {
             $url = $this->text($settings, self::EMBEDS[$type]);
 
-            if ($url === '') {
+            if ($url === '' || ! SafeUrl::isSafe($url)) {
                 return [];
             }
 
@@ -439,7 +461,7 @@ class ElementorConverter
     private function testimonial(array $settings): array
     {
         $content = $this->text($settings, 'testimonial_content');
-        $cite = implode(', ', array_filter([$this->text($settings, 'testimonial_name'), $this->text($settings, 'testimonial_job')], fn (string $part): bool => $part !== ''));
+        $cite = $this->escape(implode(', ', array_filter([$this->text($settings, 'testimonial_name'), $this->text($settings, 'testimonial_job')], fn (string $part): bool => $part !== '')));
 
         if ($content === '' && $cite === '') {
             return [];
@@ -468,7 +490,7 @@ class ElementorConverter
                 continue;
             }
 
-            $open = '<details class="wp-block-details"><summary>'.$title.'</summary>';
+            $open = '<details class="wp-block-details"><summary>'.$this->escape($title).'</summary>';
 
             $blocks[] = $this->wrapper('core/details', [], $open, '</details>', $inner);
         }
@@ -495,17 +517,17 @@ class ElementorConverter
             return [];
         }
 
-        $posts = $this->db->tableName('posts');
-        $meta = $this->db->tableName('postmeta');
+        if ($this->expansions >= self::MAX_EXPANSIONS || count($this->expanding) >= self::MAX_NESTING) {
+            if (! $this->overBudget) {
+                ($this->warn)(sprintf('Elementor templates were left out from template %d on: the page uses them more than %d times or nests them more than %d deep.', $id, self::MAX_EXPANSIONS, self::MAX_NESTING));
+                $this->overBudget = true;
+            }
 
-        $json = $this->db->table('posts')
-            ->join($meta, $meta.'.post_id', '=', $posts.'.ID')
-            ->where($posts.'.ID', $id)
-            ->where($posts.'.post_type', 'elementor_library')
-            ->where($meta.'.meta_key', '_elementor_data')
-            ->value($meta.'.meta_value');
+            return [];
+        }
 
-        $elements = is_string($json) ? $this->decode($json) : null;
+        $this->expansions++;
+        $elements = $this->loadTemplate($id);
 
         if ($elements === null) {
             ($this->warn)(sprintf('Elementor template %d was not found; its content is missing.', $id));
@@ -520,6 +542,30 @@ class ElementorConverter
         } finally {
             unset($this->expanding[$id]);
         }
+    }
+
+    /**
+     * The elements of a template of the library, read once per template.
+     *
+     * @return list<mixed>|null
+     */
+    private function loadTemplate(int $id): ?array
+    {
+        if (array_key_exists($id, $this->templates)) {
+            return $this->templates[$id];
+        }
+
+        $posts = $this->db->tableName('posts');
+        $meta = $this->db->tableName('postmeta');
+
+        $json = $this->db->table('posts')
+            ->join($meta, $meta.'.post_id', '=', $posts.'.ID')
+            ->where($posts.'.ID', $id)
+            ->where($posts.'.post_type', 'elementor_library')
+            ->where($meta.'.meta_key', '_elementor_data')
+            ->value($meta.'.meta_value');
+
+        return $this->templates[$id] = is_string($json) ? $this->decode($json) : null;
     }
 
     /**
@@ -598,9 +644,14 @@ class ElementorConverter
         return ($external ? ' target="_blank"' : '').($rel === [] ? '' : ' rel="'.implode(' ', $rel).'"');
     }
 
+    /**
+     * The URL of a link setting, or nothing when it could run script.
+     */
     private function url(mixed $link): string
     {
-        return is_array($link) ? $this->text($link, 'url') : '';
+        $url = is_array($link) ? $this->text($link, 'url') : '';
+
+        return $url !== '' && SafeUrl::isSafe($url) ? $url : '';
     }
 
     /**

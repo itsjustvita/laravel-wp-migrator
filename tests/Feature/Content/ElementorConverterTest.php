@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\DB;
 use ItsJustVita\WpMigrator\Content\Blocks\Block;
 use ItsJustVita\WpMigrator\Content\Elementor\ElementorConverter;
 use ItsJustVita\WpMigrator\Source\Dto\MetaBag;
@@ -361,4 +362,93 @@ it('expands a template each time it is used, but only from the library', functio
         '<h2 class="wp-block-heading">Again</h2>',
         '<h2 class="wp-block-heading">Again</h2>',
     ])->and($warnings)->toBe([sprintf('Elementor template %d was not found; its content is missing.', $page)]);
+});
+
+it('leaves out links and media that could run script', function () {
+    $blocks = convertElementor([
+        widget('heading', ['title' => 'Click', 'link' => ['url' => 'javascript:alert(1)']]),
+        widget('button', ['text' => 'Go', 'link' => ['url' => " jav\tascript:alert(1)"]]),
+        widget('image', ['image' => ['url' => 'javascript:alert(1)', 'id' => 3]]),
+        widget('image', ['image' => ['url' => 'https://old.example.com/a.png'], 'link_to' => 'custom', 'link' => ['url' => 'data:text/html,x']]),
+        widget('video', ['youtube_url' => 'javascript:alert(1)']),
+        widget('video', ['video_type' => 'hosted', 'hosted_url' => ['url' => 'javascript:alert(1)']]),
+        widget('icon-list', ['icon_list' => [['text' => 'Item', 'link' => ['url' => 'vbscript:x']]]]),
+        widget('heading', ['title' => 'Mail', 'link' => ['url' => 'mailto:a@example.com']]),
+    ]);
+
+    expect(array_map(fn (Block $block): string => $block->innerHtml.implode('', array_map(fn (Block $inner) => $inner->innerHtml, $block->innerBlocks)), $blocks))->toBe([
+        '<h2 class="wp-block-heading">Click</h2>',
+        '<div class="wp-block-buttons"></div><div class="wp-block-button"><a class="wp-block-button__link wp-element-button">Go</a></div>',
+        '<figure class="wp-block-image size-large"><img src="https://old.example.com/a.png" alt=""/></figure>',
+        '<ul class="wp-block-list"></ul><li>Item</li>',
+        '<h2 class="wp-block-heading"><a href="mailto:a@example.com">Mail</a></h2>',
+    ]);
+});
+
+it('escapes the fields that hold plain text', function () {
+    $blocks = convertElementor([
+        widget('testimonial', ['testimonial_content' => '<strong>Kept</strong>', 'testimonial_name' => '<script>x</script>', 'testimonial_job' => 'R&D']),
+        widget('toggle', ['tabs' => [['tab_title' => '<img src=x onerror=y>', 'tab_content' => '']]]),
+        widget('image', ['image' => ['url' => 'https://old.example.com/a.png'], 'caption_source' => 'custom', 'caption' => '<b>x</b>']),
+    ]);
+
+    expect($blocks[0]->innerHtml)->toBe('<blockquote class="wp-block-quote"><p><strong>Kept</strong></p><cite>&lt;script&gt;x&lt;/script&gt;, R&amp;D</cite></blockquote>')
+        ->and($blocks[1]->innerHtml)->toBe('<details class="wp-block-details"><summary>&lt;img src=x onerror=y&gt;</summary></details>')
+        ->and($blocks[2]->innerHtml)->toContain('<figcaption class="wp-element-caption">&lt;b&gt;x&lt;/b&gt;</figcaption>');
+});
+
+it('limits how often and how deeply templates are expanded, reading each once', function () {
+    $template = $this->source()->post(['post_type' => 'elementor_library']);
+    $this->source()->postMeta($template, '_elementor_data', json_encode([widget('divider')]));
+
+    $connection = DB::connection('wordpress');
+    $connection->flushQueryLog();
+    $connection->enableQueryLog();
+
+    $blocks = convertElementor(array_fill(0, 205, widget('global', [], ['templateID' => $template])), $warnings);
+    $queries = count($connection->getQueryLog());
+    $connection->disableQueryLog();
+
+    expect($blocks)->toHaveCount(200)
+        ->and($queries)->toBe(1)
+        ->and($warnings)->toBe([sprintf('Elementor templates were left out from template %d on: the page uses them more than 200 times or nests them more than 10 deep.', $template)]);
+
+    $chain = [];
+
+    foreach (range(1, 12) as $level) {
+        $chain[$level] = $this->source()->post(['post_type' => 'elementor_library']);
+    }
+
+    foreach ($chain as $level => $id) {
+        $next = $chain[$level + 1] ?? null;
+        $this->source()->postMeta($id, '_elementor_data', json_encode([widget('heading', ['title' => 'Level '.$level]), ...($next === null ? [] : [widget('global', [], ['templateID' => $next])])]));
+    }
+
+    $warnings = [];
+    $blocks = convertElementor([widget('global', [], ['templateID' => $chain[1]])], $warnings);
+
+    expect($blocks)->toHaveCount(10)
+        ->and($blocks[9]->innerHtml)->toBe('<h2 class="wp-block-heading">Level 10</h2>')
+        ->and($warnings)->toHaveCount(1)
+        ->and($warnings[0])->toContain('from template '.$chain[11].' on');
+
+    expect(convertElementor(array_fill(0, 3, widget('global', [], ['templateID' => $template]))))->toHaveCount(3);
+});
+
+it('starts the template budget afresh for every page', function () {
+    $template = $this->source()->post(['post_type' => 'elementor_library']);
+    $this->source()->postMeta($template, '_elementor_data', json_encode([widget('divider')]));
+    $converter = app(ElementorConverter::class);
+    $page = (string) json_encode(array_fill(0, 205, widget('global', [], ['templateID' => $template])));
+    $warnings = [];
+    $warn = function (string $message) use (&$warnings): void {
+        $warnings[] = $message;
+    };
+
+    $first = $converter->convert($page, $warn);
+    $second = $converter->convert($page, $warn);
+
+    expect($first)->toHaveCount(200)
+        ->and($second)->toHaveCount(200)
+        ->and($warnings)->toHaveCount(2);
 });
