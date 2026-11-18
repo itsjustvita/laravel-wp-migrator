@@ -11,7 +11,6 @@ use ItsJustVita\WpMigrator\Content\Urls\DefaultUrlResolver;
 use ItsJustVita\WpMigrator\Detection\Finding;
 use ItsJustVita\WpMigrator\Detection\Suspicious\SuspiciousContent;
 use ItsJustVita\WpMigrator\Inventory\Theme\AssetDefinition;
-use ItsJustVita\WpMigrator\Inventory\Theme\PostTypeDefinition;
 use ItsJustVita\WpMigrator\Inventory\Theme\Template;
 use ItsJustVita\WpMigrator\Inventory\Theme\ThemeInventory;
 
@@ -39,10 +38,6 @@ class MigrationPlan
         'responsive-embeds' => 'Make embedded players responsive in the CSS.',
     ];
 
-    private const array NOT_CONTENT = ['attachment', 'nav_menu_item', 'revision'];
-
-    private const array NO_ARCHIVE = ['post_format'];
-
     private const int EXAMPLES = 5;
 
     /** A namespace with at least this many unknown blocks is listed as one item. */
@@ -54,6 +49,8 @@ class MigrationPlan
     private ThemeInventory $theme;
 
     private SiteFacts $site;
+
+    private Frontend $frontend;
 
     public function __construct(
         private readonly Repository $config,
@@ -67,6 +64,7 @@ class MigrationPlan
     {
         $this->theme = $theme;
         $this->site = $site;
+        $this->frontend = new Frontend($theme, $site, $this->config);
         $this->installedPlugins = $installedPlugins;
 
         $sections = [
@@ -148,7 +146,7 @@ class MigrationPlan
             );
         }
 
-        $counts = $this->contentCounts();
+        $counts = $this->frontend->contentCounts();
 
         if ($counts !== []) {
             $lines[] = '';
@@ -166,48 +164,42 @@ class MigrationPlan
 
     private function routes(): string
     {
-        $items = [];
+        $front = $this->frontend->front();
+        $items = [sprintf('- [ ] **Front page**: route `/` with the view `%s`%s.', $front->viewPath(), $this->from($front->template))];
 
-        $front = $this->find('front-page') ?? $this->find('home') ?? $this->find('index');
-        $items[] = sprintf('- [ ] **Front page**: route `/` with the view `resources/views/home.blade.php`%s.', $this->from($front));
-
-        foreach ($this->postTypes() as $type) {
-            if ($this->hasPages($type) && ! ($type === 'post' && $this->site->reachable && ! isset($this->site->postCounts['post']))) {
-                $items[] = $this->postTypeItem($type);
-            }
+        foreach ($this->frontend->routedTypes() as $type) {
+            $items[] = $this->postTypeItem($type);
         }
 
-        foreach ($this->theme->templates as $template) {
-            if (in_array($template->kind, ['single', 'page'], true) && $template->detail !== null) {
-                $items[] = $this->specificItem($template);
-            }
+        foreach ($this->frontend->specific() as $specific) {
+            $items[] = $this->specificItem($specific);
         }
 
-        foreach ($this->theme->templates as $template) {
-            if ($template->kind === 'custom') {
-                $items[] = $this->customTemplateItem($template);
-            }
+        foreach ($this->frontend->layouts() as $layout) {
+            $items[] = $this->layoutItem($layout);
         }
 
         array_push($items, ...$this->archiveItems());
 
-        $search = $this->find('search');
+        $search = $this->frontend->search();
 
         if ($search !== null) {
-            $items[] = sprintf('- [ ] **Search**: route `/search` with the view `resources/views/search.blade.php`, for example backed by Laravel Scout%s.', $this->from($search));
+            $items[] = sprintf('- [ ] **Search**: route `/search` with the view `%s`, for example backed by Laravel Scout%s.', $search->viewPath(), $this->from($search->template));
         }
 
-        $notFound = $this->find('not-found');
+        $notFound = $this->frontend->notFound();
 
         if ($notFound !== null) {
-            $items[] = sprintf('- [ ] **Page not found**: the view `resources/views/errors/404.blade.php`%s.', $this->from($notFound));
+            $items[] = sprintf('- [ ] **Page not found**: the view `%s`%s.', $notFound->viewPath(), $this->from($notFound->template));
         }
 
-        if ($this->find('date') !== null) {
-            $items[] = sprintf('- [ ] **Date archives**: there is no URL pattern for them, so old date URLs get no redirect; build them only if they matter%s.', $this->from($this->find('date')));
+        $date = $this->frontend->find('date');
+
+        if ($date !== null) {
+            $items[] = sprintf('- [ ] **Date archives**: there is no URL pattern for them, so old date URLs get no redirect; build them only if they matter%s.', $this->from($date));
         }
 
-        if ($this->find('attachment') !== null) {
+        if ($this->frontend->find('attachment') !== null) {
             $items[] = '- Attachment pages need no view: their redirects lead to the files.';
         }
 
@@ -220,68 +212,31 @@ class MigrationPlan
 
     private function postTypeItem(string $type): string
     {
-        $definition = $this->definition($type);
-        $plural = Str::plural(str_replace('_', '-', $type));
-        $label = $this->label($type);
-
-        $single = $this->singleTemplate($type);
-        $route = $this->postRoute($type);
+        $definition = $this->frontend->definition($type);
+        $single = $this->frontend->single($type);
         $published = $this->site->postCounts[$type]['publish'] ?? null;
 
         $item = sprintf(
-            '- [ ] **%s** (`%s`%s): %s with the view `resources/views/%s/show.blade.php`%s.',
-            $label,
+            '- [ ] **%s** (`%s`%s): %s with the view `%s`%s.',
+            $single->label,
             $type,
             $published === null ? '' : ', '.$published.' published',
-            $route === null ? 'no URL pattern; add one to `urls.patterns`' : 'route `'.$route.'`',
-            $plural,
-            $this->from($single),
+            $single->uri === null ? 'no URL pattern; add one to `urls.patterns`' : 'route `'.$single->uri.'`',
+            $single->viewPath(),
+            $this->from($single->template),
         );
 
         if ($definition?->rewriteSlug !== null && $definition->rewriteSlug !== $type && ! $this->hasConfiguredSlug($type)) {
             $item .= sprintf(' Its old URLs started with `/%s/`; check that the redirects cover them with `php artisan wp:redirects:export`, and set `urls.post_type_slugs.%s` if not.', trim($definition->rewriteSlug, '/'), $type);
         }
 
-        $archive = $this->archiveTemplate($type, $definition);
+        $archive = $this->frontend->archive($type);
 
-        if ($archive !== false) {
-            $item .= sprintf(
-                ' Archive: route `%s` with the view `resources/views/%s/index.blade.php`%s.',
-                $this->archiveRoute($route, $plural),
-                $plural,
-                $this->from($archive),
-            );
+        if ($archive !== null) {
+            $item .= sprintf(' Archive: route `%s` with the view `%s`%s.', $archive->uri, $archive->viewPath(), $this->from($archive->template));
         }
 
         return $item;
-    }
-
-    private function label(string $type): string
-    {
-        return $this->definition($type)->label ?? match ($type) {
-            'post' => 'Posts',
-            'page' => 'Pages',
-            default => Str::headline($type),
-        };
-    }
-
-    /**
-     * Whether the posts of a type had pages of their own: the theme did not
-     * register it as not public, and the rewrite rules lead to it.
-     */
-    private function hasPages(string $type): bool
-    {
-        if (in_array($type, ['page', 'post'], true)) {
-            return true;
-        }
-
-        $definition = $this->definition($type);
-
-        if ($definition !== null) {
-            return $definition->public !== false;
-        }
-
-        return $this->site->queryVars === null || in_array($type, $this->site->queryVars, true);
     }
 
     private function users(): string
@@ -328,17 +283,17 @@ class MigrationPlan
     {
         $items = [];
 
-        foreach ($this->postTypes() as $type) {
-            if ($this->hasPages($type)) {
+        foreach ($this->frontend->postTypes() as $type) {
+            if ($this->frontend->hasPages($type)) {
                 continue;
             }
 
-            $definition = $this->definition($type);
+            $definition = $this->frontend->definition($type);
             $total = array_sum($this->site->postCounts[$type] ?? []);
 
             $items[] = sprintf(
                 '- [ ] **%s** (`%s`%s): %s. If it holds data rather than content, such as form entries or settings, add it to `import.excluded_post_types` before the import; such data often includes personal data. Otherwise import it, but give it no route.',
-                $this->label($type),
+                $this->frontend->label($type),
                 $type,
                 $total === 0 ? '' : sprintf(', %d %s', $total, $total === 1 ? 'post' : 'posts'),
                 $definition !== null
@@ -350,36 +305,26 @@ class MigrationPlan
         return $items === [] ? '' : "## Data without pages\n\n".implode("\n", $items);
     }
 
-    private function specificItem(Template $template): string
+    private function specificItem(FrontendItem $item): string
     {
-        $type = $template->kind === 'page' ? 'page' : ($template->subject ?? 'post');
-        $route = $this->postRoute($type);
-        $path = $route === null ? null : strtr($route, ['{path}' => (string) $template->detail, '{slug}' => (string) $template->detail]);
-
         return sprintf(
-            '- [ ] **%s "%s"**: %s gets its own view `resources/views/%s/%s.blade.php`%s.',
-            $type === 'page' ? 'Page' : Str::headline($type),
-            $template->detail,
-            $path === null ? 'it' : 'the '.($type === 'page' ? 'page' : 'post').' at `'.$path.'`',
-            Str::plural(str_replace('_', '-', $type)),
-            $template->detail,
-            $this->from($template),
+            '- [ ] **%s**: %s gets its own view `%s`%s.',
+            $item->label,
+            $item->uri === null ? 'it' : 'the '.($item->subject === 'page' ? 'page' : 'post').' at `'.$item->uri.'`',
+            $item->viewPath(),
+            $this->from($item->template),
         );
     }
 
-    private function customTemplateItem(Template $template): string
+    private function layoutItem(FrontendItem $layout): string
     {
-        $slug = Str::slug((string) $template->subject);
-        // Classic themes store the file, block themes the template's slug.
-        $stored = str_ends_with($template->path, '.html') ? pathinfo($template->path, PATHINFO_FILENAME) : $template->path;
-
         return sprintf(
-            '- [ ] **Page template "%s"**%s: a layout `resources/views/layouts/%s.blade.php` for the posts whose `posts.template` is `%s`; %s.',
-            $template->subject,
-            $this->from($template, ' (', ')'),
-            $slug,
-            $stored,
-            $this->templateUsage($this->site->pageTemplates[$stored] ?? []),
+            '- [ ] **%s**%s: a layout `%s` for the posts whose `posts.template` is `%s`; %s.',
+            $layout->label,
+            $this->from($layout->template, ' (', ')'),
+            $layout->viewPath(),
+            $layout->subject,
+            $this->templateUsage($this->site->pageTemplates[(string) $layout->subject] ?? []),
         );
     }
 
@@ -420,52 +365,20 @@ class MigrationPlan
     private function archiveItems(): array
     {
         $items = [];
-        $taxonomies = ['category' => 'Category', 'post_tag' => 'Tag'];
 
-        foreach (array_keys($this->site->taxonomies) as $taxonomy) {
-            $taxonomies[$taxonomy] ??= Str::headline($taxonomy);
-        }
-
-        foreach ($this->theme->taxonomies as $taxonomy) {
-            $taxonomies[$taxonomy->name] = $taxonomy->label ?? Str::headline($taxonomy->name);
-        }
-
-        $patterns = $this->config->get('wp-migrator.urls.term_patterns', []);
-        $patterns = is_array($patterns) ? $patterns : [];
-
-        foreach ($taxonomies as $taxonomy => $label) {
-            $specific = $this->find('term', $taxonomy);
-            $builtIn = in_array($taxonomy, ['category', 'post_tag'], true);
-            $pattern = $patterns[$taxonomy] ?? null;
-            $pattern = is_string($pattern) ? $pattern : null;
-
-            if (in_array($taxonomy, self::NO_ARCHIVE, true) || ! $this->needsArchive($taxonomy, $specific !== null, $pattern !== null)) {
-                continue;
-            }
-
-            // A taxonomy of a plugin that had no archive URLs on the site.
-            if (! $builtIn && ! $this->themeTaxonomy($taxonomy) && $this->site->queryVars !== null && ! in_array($taxonomy, $this->site->queryVars, true)) {
-                continue;
-            }
-
-            $plural = match ($taxonomy) {
-                'category' => 'categories',
-                'post_tag' => 'tags',
-                default => Str::plural(str_replace('_', '-', $taxonomy)),
-            };
-
-            $template = $specific ?? ($builtIn ? null : $this->find('term')) ?? $this->find('archive') ?? $this->find('index');
+        foreach ($this->frontend->termArchives() as $archive) {
+            $builtIn = $this->frontend->builtInTaxonomy((string) $archive->subject);
 
             $item = sprintf(
-                '- [ ] **%s archive** (`%s`): %s`resources/views/%s/show.blade.php`%s.',
-                Str::singular($label),
-                $taxonomy,
-                $this->routeWith($pattern),
-                $plural,
-                $this->from($template),
+                '- [ ] **%s** (`%s`): %s`%s`%s.',
+                $archive->label,
+                $archive->subject,
+                $this->routeWith($archive->uri),
+                $archive->viewPath(),
+                $this->from($archive->template),
             );
 
-            if ($pattern === null) {
+            if ($archive->uri === null) {
                 $item .= ' It has no URL pattern yet; add one to `urls.term_patterns`'.($builtIn ? ' so its old URLs get redirects.' : ' so menu items that link to it work.');
             }
 
@@ -476,48 +389,24 @@ class MigrationPlan
             $items[] = $item;
         }
 
-        $pattern = $this->config->get('wp-migrator.urls.author_pattern');
-        $author = $this->find('author');
+        $author = $this->frontend->authorArchive();
 
-        if (is_string($pattern) || $author !== null) {
+        if ($author !== null) {
             $items[] = sprintf(
-                '- [ ] **Author archive**: %s`resources/views/authors/show.blade.php`%s.%s',
-                $this->routeWith(is_string($pattern) ? $pattern : null),
-                $this->from($author ?? $this->find('archive') ?? $this->find('index')),
-                is_string($pattern) ? '' : ' It has no URL pattern yet; set `urls.author_pattern` so its old URLs get redirects.',
+                '- [ ] **Author archive**: %s`%s`%s.%s',
+                $this->routeWith($author->uri),
+                $author->viewPath(),
+                $this->from($author->template),
+                $author->uri === null ? ' It has no URL pattern yet; set `urls.author_pattern` so its old URLs get redirects.' : '',
             );
         }
 
         return $items;
     }
 
-    private function themeTaxonomy(string $taxonomy): bool
-    {
-        foreach ($this->theme->taxonomies as $definition) {
-            if ($definition->name === $taxonomy) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private function routeWith(?string $pattern): string
     {
         return $pattern === null ? 'the view ' : 'route `'.$pattern.'` with the view ';
-    }
-
-    /**
-     * Archives the new site needs: those the redirects lead to, and those
-     * the theme has its own template for, unless the site has no terms.
-     */
-    private function needsArchive(string $taxonomy, bool $hasTemplate, bool $hasPattern): bool
-    {
-        if ($this->site->reachable && ($this->site->taxonomies[$taxonomy] ?? 0) === 0) {
-            return false;
-        }
-
-        return $hasTemplate || $hasPattern || ! in_array($taxonomy, ['category', 'post_tag'], true);
     }
 
     private function components(): string
@@ -847,121 +736,11 @@ class MigrationPlan
         ]);
     }
 
-    /**
-     * Content post types: those of the theme, those with posts, and posts and pages.
-     *
-     * @return list<string>
-     */
-    private function postTypes(): array
-    {
-        $types = ['page', 'post'];
-
-        foreach ($this->theme->postTypes as $definition) {
-            $types[] = $definition->name;
-        }
-
-        foreach (array_keys($this->contentCounts()) as $type) {
-            $types[] = $type;
-        }
-
-        return array_values(array_unique($types));
-    }
-
-    /**
-     * @return array<string, array<string, int>>
-     */
-    private function contentCounts(): array
-    {
-        $excluded = [...self::NOT_CONTENT, ...$this->config->array('wp-migrator.import.excluded_post_types')];
-
-        return array_filter(
-            $this->site->postCounts,
-            fn (string $type): bool => ! in_array($type, $excluded, true),
-            ARRAY_FILTER_USE_KEY,
-        );
-    }
-
-    private function definition(string $type): ?PostTypeDefinition
-    {
-        foreach ($this->theme->postTypes as $definition) {
-            if ($definition->name === $type) {
-                return $definition;
-            }
-        }
-
-        return null;
-    }
-
     private function hasConfiguredSlug(string $type): bool
     {
         $slugs = $this->config->get('wp-migrator.urls.post_type_slugs', []);
 
         return is_array($slugs) && isset($slugs[$type]);
-    }
-
-    private function postRoute(string $type): ?string
-    {
-        $patterns = $this->config->get('wp-migrator.urls.patterns', []);
-        $pattern = is_array($patterns) ? ($patterns[$type] ?? $patterns['*'] ?? null) : null;
-
-        return is_string($pattern) ? str_replace('{type}', $type, $pattern) : null;
-    }
-
-    private function archiveRoute(?string $route, string $plural): string
-    {
-        if ($route === null) {
-            return '/'.$plural;
-        }
-
-        $prefix = (string) preg_replace('#/[^/]*\{[a-z]+\}.*$#', '', $route);
-
-        return $prefix === '' ? '/'.$plural : $prefix;
-    }
-
-    private function singleTemplate(string $type): ?Template
-    {
-        foreach ($this->theme->templates as $template) {
-            if ($template->kind === 'single' && $template->subject === $type && $template->detail === null) {
-                return $template;
-            }
-
-            if ($type === 'page' && $template->kind === 'page' && $template->detail === null) {
-                return $template;
-            }
-        }
-
-        return ($type === 'page' ? null : $this->find('single', 'post')) ?? $this->find('singular') ?? $this->find('index');
-    }
-
-    private function archiveTemplate(string $type, ?PostTypeDefinition $definition): Template|false|null
-    {
-        if ($type === 'post') {
-            return $this->find('home') ?? $this->find('index');
-        }
-
-        $specific = $this->find('archive', $type);
-
-        if ($specific !== null) {
-            return $specific;
-        }
-
-        return $definition !== null && $definition->hasArchive !== null && $definition->hasArchive !== false
-            ? ($this->find('archive') ?? $this->find('index'))
-            : false;
-    }
-
-    /**
-     * The template of a kind for one subject, or the general one without a subject.
-     */
-    private function find(string $kind, ?string $subject = null): ?Template
-    {
-        foreach ($this->theme->templates as $template) {
-            if ($template->kind === $kind && $template->detail === null && $template->subject === $subject) {
-                return $template;
-            }
-        }
-
-        return null;
     }
 
     private function from(?Template $template, string $before = ', from ', string $after = ''): string
