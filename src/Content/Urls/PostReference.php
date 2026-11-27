@@ -16,6 +16,7 @@ final readonly class PostReference
      * @param  string|null  $date  post_date in the site's timezone, "Y-m-d H:i:s"
      * @param  string|null  $author  the author's nicename
      * @param  string|null  $category  the slugs of the post's category and its parents: "news/tech"
+     * @param  bool  $frontPage  WP shows this page on the front page, so its address was the root of the site
      */
     public function __construct(
         public int $id,
@@ -26,5 +27,6 @@ final readonly class PostReference
         public ?string $date = null,
         public ?string $author = null,
         public ?string $category = null,
+        public bool $frontPage = false,
     ) {}
 }

@@ -74,6 +74,9 @@ return [
         'excluded_taxonomies' => [
             'nav_menu', 'link_category', 'wp_theme', 'wp_template_part_area', 'wp_pattern_category',
             'post_translations', 'term_translations', 'term_language',
+            // Data of common plugins: what kind of product a product is and
+            // where it shows, and the groups of a cookie banner.
+            'product_type', 'product_visibility', 'product_shipping_class', 'rcb-cookie-group',
         ],
     ],
 

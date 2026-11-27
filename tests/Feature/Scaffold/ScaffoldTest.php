@@ -349,3 +349,28 @@ it('keeps names from the old site from turning into code', function () {
         ->and($files['resources/views/vendor/wp-migrator/blocks/elementor/acme-hero.blade.php'])->not->toContain('system')
         ->and(array_filter(array_keys($files), fn (string $path): bool => str_contains($path, 'evil') || str_ends_with($path, '/.blade.php')))->toBe([]);
 });
+
+it('writes no archives of a blog for a site without posts', function () {
+    $scaffold = scaffold(
+        ['templates' => [new Template('index.php', 'index'), new Template('author.php', 'author')]],
+        ['postCounts' => ['page' => ['publish' => 3]], 'taxonomies' => ['category' => 1], 'authors' => ['alice' => 3]],
+    );
+    $files = $scaffold->files();
+
+    expect($files['routes/wp.php'])->not->toContain('wp.author')->not->toContain('wp.term.category')->not->toContain('wp.post.')
+        ->and(array_keys($files))->not->toContain('resources/views/authors/show.blade.php', 'resources/views/categories/show.blade.php')
+        ->and($scaffold->notes())->toBe([]);
+});
+
+it('writes no views for the blocks of the shop', function () {
+    $scaffold = scaffold(site: ['blocks' => [
+        'woocommerce/cart' => ['count' => 1, 'post_ids' => [1]],
+        'woocommerce/checkout' => ['count' => 1, 'post_ids' => [2]],
+        'acme/teaser' => ['count' => 1, 'post_ids' => [3]],
+    ]]);
+    $files = $scaffold->files();
+
+    expect(array_values(array_filter(array_keys($files), fn (string $path): bool => str_contains($path, '/blocks/'))))
+        ->toBe(['resources/views/vendor/wp-migrator/blocks/acme/teaser.blade.php'])
+        ->and($scaffold->notes())->toBe(['2 blocks of WooCommerce got no views: the shop is not migrated.']);
+});

@@ -45,7 +45,7 @@ function planTheme(array $overrides = []): ThemeInventory
  */
 function planSite(array $overrides = []): SiteFacts
 {
-    return new SiteFacts(...array_merge(['reachable' => true, 'siteName' => 'Shop', 'homeUrl' => 'https://shop.example'], $overrides));
+    return new SiteFacts(...array_merge(['reachable' => true, 'siteName' => 'Shop', 'homeUrl' => 'https://shop.example', 'postCounts' => ['page' => ['publish' => 1], 'post' => ['publish' => 1]]], $overrides));
 }
 
 function renderPlan(ThemeInventory $theme, ?SiteFacts $site = null): string
@@ -393,7 +393,7 @@ it('takes the page view from page.php and gives pages no archive', function () {
         new Template('single.php', 'single', 'post'),
         new Template('page.php', 'page'),
         new Template('archive.php', 'archive'),
-    ]]));
+    ]]), planSite(['postCounts' => []]));
 
     expect($plan)->toContain('- [ ] **Pages** (`page`): route `/{path}` with the view `resources/views/pages/show.blade.php`, from `page.php`.'."\n")
         ->not->toContain('own view');
@@ -531,4 +531,40 @@ it('ends with the steps up to going live', function () {
     expect(renderPlan(planTheme()))
         ->toContain("## Next steps\n\n1. Run `php artisan wp:import --dry-run`")
         ->toContain('4. Shortly before going live, run `php artisan wp:import --prune` once more');
+});
+
+it('leaves out the archives of a blog when the site has no posts', function () {
+    $theme = planTheme([
+        'templates' => [new Template('index.php', 'index'), new Template('author.php', 'author'), new Template('category.php', 'term', 'category')],
+        'taxonomies' => [new TaxonomyDefinition('genre', 'Genres', ['book'], true, null, 'functions.php')],
+    ]);
+    $taxonomies = ['category' => 1, 'post_tag' => 2, 'genre' => 1];
+
+    expect(renderPlan($theme, planSite(['postCounts' => ['page' => ['publish' => 3]], 'taxonomies' => $taxonomies])))
+        ->not->toContain('Category archive')
+        ->not->toContain('Tag archive')
+        ->not->toContain('Author archive')
+        ->toContain('**Genre archive**')
+        ->and(renderPlan($theme, planSite(['taxonomies' => $taxonomies])))
+        ->toContain('**Category archive**')
+        ->toContain('**Tag archive**')
+        ->toContain('**Author archive**')
+        ->and(renderPlan($theme, SiteFacts::unreachable('down')))
+        ->toContain('**Category archive**')
+        ->toContain('**Author archive**');
+});
+
+it('says that the blocks of the shop need no views', function () {
+    $many = [];
+
+    foreach (['cart', 'cart-items-block', 'checkout', 'checkout-fields-block'] as $index => $name) {
+        $many['woocommerce/'.$name] = ['count' => 1, 'post_ids' => [70 + $index]];
+    }
+
+    expect(renderPlan(planTheme(), planSite(['blocks' => $many])))
+        ->toContain('- [ ] 4 blocks from `woocommerce/`, used 4 times, for example in the posts with the IDs 70, 71, 72, 73: `cart`, `cart-items-block`, `checkout`, `checkout-fields-block`. They belong to the shop, which is not migrated: replace the pages that use them, such as the cart and the checkout, or leave them out.')
+        ->not->toContain('blocks/woocommerce')
+        ->and(renderPlan(planTheme(), planSite(['blocks' => ['woocommerce/cart' => ['count' => 2, 'post_ids' => [70]]]])))
+        ->toContain('- [ ] Block `woocommerce/cart`: used 2 times, for example in the post with the ID 70. It belongs to the shop, which is not migrated: replace the page that uses it, or leave it out.')
+        ->not->toContain('blocks/woocommerce');
 });

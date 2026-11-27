@@ -11,6 +11,7 @@ use Illuminate\Config\Repository;
  * post type with "*" as the fallback (tokens {slug}, {path}, {type}, {id},
  * {year}, {month}, {day}), urls.term_patterns per taxonomy (tokens {slug},
  * {path}, {taxonomy}, {id}) and urls.author_pattern (tokens {slug}, {id}).
+ * The page WP shows on the front page keeps the root as its address.
  */
 class DefaultUrlResolver implements UrlResolver
 {
@@ -18,6 +19,10 @@ class DefaultUrlResolver implements UrlResolver
 
     public function forPost(PostReference $post): ?string
     {
+        if ($post->frontPage) {
+            return '/';
+        }
+
         $patterns = $this->config->get('wp-migrator.urls.patterns', []);
         $pattern = is_array($patterns) ? ($patterns[$post->type] ?? $patterns['*'] ?? null) : null;
 

@@ -191,3 +191,20 @@ it('finds posts by slug when the site uses plain permalinks', function () {
 
     expect(urlIndex()->find('/hello')?->id)->toBe($id);
 });
+
+it('marks the page WP shows on the front page', function (string $shows, bool $marked) {
+    $site = $this->source();
+    $site->option('permalink_structure', '/%postname%/');
+    $home = $site->page(['post_name' => 'welcome']);
+    $about = $site->page(['post_name' => 'about']);
+    $site->option('show_on_front', $shows)->option('page_on_front', (string) $home);
+
+    $index = urlIndex();
+
+    expect($index->findById($home)?->frontPage)->toBe($marked)
+        ->and($index->findById($about)?->frontPage)->toBeFalse()
+        ->and($index->find('/welcome')?->id)->toBe($home);
+})->with([
+    'a page' => ['page', true],
+    'the latest posts' => ['posts', false],
+]);

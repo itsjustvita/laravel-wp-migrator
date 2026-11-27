@@ -170,3 +170,26 @@ it('writes the slug of an author with letters outside ASCII into the new URL onc
         '/?author='.$mueller => '/blog/author/m%C3%BCller',
     ]);
 });
+
+it('redirects the address of the page on the front page to the root', function () {
+    $this->site->option('show_on_front', 'page')->option('page_on_front', (string) $this->company);
+
+    importRedirects();
+
+    expect(redirectMap())->toMatchArray([
+        '/company' => '/',
+        '/?p='.$this->company => '/',
+        '/?page_id='.$this->company => '/',
+        '/?page_id='.$this->team => '/company/team',
+    ]);
+});
+
+it('writes no redirects for the archives of a blog when the site has no posts', function () {
+    $this->site->table('posts')->where('post_type', 'post')->delete();
+
+    importRedirects();
+
+    expect(array_keys(redirectMap()))
+        ->toContain('/?page_id='.$this->team, '/veranstaltungen/concert')
+        ->not->toContain('/thema/news', '/?cat='.$this->news, '/tag/php', '/?tag=php', '/author/alice', '/?author='.$this->alice);
+});

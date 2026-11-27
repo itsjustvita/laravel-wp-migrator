@@ -37,6 +37,11 @@ it('skips menu and other internal taxonomies and filters by taxonomy', function 
     $site->term('nav_menu', 'Main');
     $site->term('link_category', 'Links');
     $site->term('wp_theme', 'twentytwentyfour');
+    // What plugins keep as terms without it being content: the type and visibility of products, the groups of a cookie banner.
+    $site->term('product_type', 'simple');
+    $site->term('product_visibility', 'featured');
+    $site->term('product_shipping_class', 'bulky');
+    $site->term('rcb-cookie-group', 'Essential');
 
     $reader = app(TermReader::class);
     $ids = fn (TermFilter $filter) => array_map(fn (SourceTerm $term) => $term->id, $reader->all($filter));

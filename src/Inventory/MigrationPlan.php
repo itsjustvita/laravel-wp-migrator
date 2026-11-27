@@ -528,7 +528,9 @@ class MigrationPlan
             }
 
             foreach ($blocks as $name => $usage) {
-                $items[] = sprintf('- [ ] Block `%s`: %s Create the view `%s`, or it renders its stored HTML.', $name, $this->usage($usage), $this->blockView($name));
+                $items[] = $this->frontend->shopBlock($name)
+                    ? sprintf('- [ ] Block `%s`: %s It belongs to the shop, which is not migrated: replace the page that uses it, or leave it out.', $name, $this->usage($usage))
+                    : sprintf('- [ ] Block `%s`: %s Create the view `%s`, or it renders its stored HTML.', $name, $this->usage($usage), $this->blockView($name));
             }
         }
 
@@ -548,8 +550,12 @@ class MigrationPlan
         sort($ids);
         $ids = array_slice($ids, 0, self::EXAMPLES);
 
+        $advice = $this->frontend->shopBlock($namespace.'/')
+            ? 'They belong to the shop, which is not migrated: replace the pages that use them, such as the cart and the checkout, or leave them out.'
+            : sprintf('Create a view for each in `resources/views/vendor/wp-migrator/blocks/%s/`, or they render their stored HTML.', $namespace);
+
         return sprintf(
-            '- [ ] %d blocks from `%s/`, used %d times, for example in the %s with the %s %s: %s. Create a view for each in `resources/views/vendor/wp-migrator/blocks/%s/`, or they render their stored HTML.',
+            '- [ ] %d blocks from `%s/`, used %d times, for example in the %s with the %s %s: %s. %s',
             count($blocks),
             $namespace,
             array_sum(array_column($blocks, 'count')),
@@ -557,7 +563,7 @@ class MigrationPlan
             count($ids) === 1 ? 'ID' : 'IDs',
             implode(', ', $ids),
             $this->codeList(array_map(fn (string $name): string => substr($name, strlen($namespace) + 1), array_keys($blocks))),
-            $namespace,
+            $advice,
         );
     }
 

@@ -91,6 +91,22 @@ class PostUrlIndex
         return $this->paths[$id] ?? null;
     }
 
+    /**
+     * Whether the site has content of the post type.
+     */
+    public function hasType(string $type): bool
+    {
+        $this->load();
+
+        foreach ($this->byId as $reference) {
+            if ($reference->type === $type) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function findById(int $id): ?PostReference
     {
         $this->load();
@@ -140,6 +156,7 @@ class PostUrlIndex
         $categories = str_contains($structure, '%category%') ? $this->categories() : [];
         $defaultCategory = $categories['default'] ?? null;
         $builder = new PermalinkBuilder($structure, $this->postTypeSlugs());
+        $front = $this->db->option('show_on_front') === 'page' ? (int) $this->db->option('page_on_front') : 0;
 
         foreach ($rows as $row) {
             $id = (int) $row->ID;
@@ -154,6 +171,7 @@ class PostUrlIndex
                 date: (string) $row->post_date,
                 author: $authors[(int) $row->post_author] ?? null,
                 category: $categories[$id] ?? $defaultCategory,
+                frontPage: $id === $front,
             );
 
             $this->byId[$id] = $reference;

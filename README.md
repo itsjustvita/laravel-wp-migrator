@@ -95,7 +95,7 @@ Without `--theme` it looks for the active theme, and its parent if it is a child
 The plan is a Markdown checklist for whoever builds the new frontend:
 
 - the administrator accounts to review before the import, and signs of a hack in the content, the options and the uploads
-- routes and views for the front page, every post type and its archive, pages with their own template, page templates with the posts that use them, and the category, tag, author and custom taxonomy archives, following the URL patterns in the configuration
+- routes and views for the front page, every post type and its archive, pages with their own template, page templates with the posts that use them, and the category, tag, author and custom taxonomy archives, following the URL patterns in the configuration; a site without posts gets no category, tag and author archives
 - post types without pages of their own, such as form entries, which you may want to leave out of the import
 - components for headers, footers, sidebars and template parts, and the menu locations with the menus assigned to them
 - shortcodes and blocks that have no handler or view yet, with how often and where the content uses them
@@ -119,11 +119,11 @@ It reads the theme and the source database like `wp:inventory`, and the imported
 - `app/Http/Controllers/WpController.php` for the front page, single posts and pages, archives, taxonomy and author archives and search, and `app/Support/WpUrl.php` for links to posts and terms
 - views under the names the migration plan uses, such as `pages/show`, `events/show` and `posts/index`, each noting the theme file it replaces
 - the layout `layouts/wp` with the SEO tags, a layout for each page template, and components for the header, the footer and the menus of the theme's locations
-- a view for each block without one; for Elementor widgets it lists the settings the imported widgets hold
+- a view for each block without one; for Elementor widgets it lists the settings the imported widgets hold. The blocks of WooCommerce get none, since the shop is not migrated
 
 Run it after the import. The files belong to your application: change them as you like, `wp:scaffold` keeps files that exist unless you pass `--force`. Names from the old site end up in code, and a hacked site controls them, so post types, taxonomies, menu locations, author slugs and widget settings whose names do not match the key formats of WP are left out with a note, and every other text is escaped. The views of widgets print their fields escaped; print fields whose HTML you trust with `{!! !!}`.
 
-The routes are loaded at the end of `routes/web.php`, so the front page replaces an earlier route for `/`, such as the welcome page of a new application. A route for `/` that you define after that line wins instead, and the command says so.
+The routes are loaded at the end of `routes/web.php`, so the front page replaces an earlier route for `/`, such as the welcome page of a new application. The page shown there has this one address: the route for pages redirects its own slug to `/`. A route for `/` that you define after that line wins instead, and the command says so.
 
 The imported users keep no slug, so the controller lists the authors that have posts, each slug with the ID the user had on the old site, and finds the user through the import map. Scaffold again with `--force` when authors were added, or use `{id}` in `urls.author_pattern`, which needs no list.
 
@@ -147,7 +147,7 @@ Nothing is changed or removed: each finding names the posts, options or files to
 
 Block content is parsed from its comment markers. Malformed markers never fail an import, they stay plain HTML. Content without markers is classic content: it gets paragraphs and line breaks and ends up as a single `core/freeform` block. References to reusable blocks are replaced by their content.
 
-Links to the old site are rewritten. Upload URLs, including resized variants, point to the new media files. Post links point to the URL the resolver returns, by default from the patterns in the `urls` section of the configuration. For routes those patterns cannot express, implement `ItsJustVita\WpMigrator\Content\Urls\UrlResolver` and set it as `urls.resolver`. New URLs are built from the source site, so a link works even when its target is imported later in the same run. Whatever cannot be resolved stays in place and is listed in the report.
+Links to the old site are rewritten. Upload URLs, including resized variants, point to the new media files. Post links point to the URL the resolver returns, by default from the patterns in the `urls` section of the configuration. The page WP shows on the front page keeps `/` as its address, whatever the pattern for pages says. For routes those patterns cannot express, implement `ItsJustVita\WpMigrator\Content\Urls\UrlResolver` and set it as `urls.resolver`. New URLs are built from the source site, so a link works even when its target is imported later in the same run. Whatever cannot be resolved stays in place and is listed in the report.
 
 The stored HTML comes from the old site and is rendered as it is, the same way WP treats post content. Only import sites whose authors you trust.
 
@@ -302,7 +302,7 @@ php artisan wp:password-stats
 
 ### Redirects
 
-The `redirects` importer runs last. It works out the URLs of the old site from its permalink settings: posts, pages with their hierarchy, custom post types, category, tag and author archives, attachment pages, and query URLs such as `/?p=123`. Each one gets a redirect to its new URL from the URL resolver, unless the URL stays the same. Attachment pages redirect to the file. Set the archive patterns in `urls.term_patterns` and `urls.author_pattern`, or set them to `null` to leave those archives out.
+The `redirects` importer runs last. It works out the URLs of the old site from its permalink settings: posts, pages with their hierarchy, custom post types, category, tag and author archives, attachment pages, and query URLs such as `/?p=123`. Each one gets a redirect to its new URL from the URL resolver, unless the URL stays the same. Attachment pages redirect to the file. The address the page on the front page had under its own slug redirects to `/`, and a site without posts gets no redirects for category, tag and author archives, which showed nothing. Set the archive patterns in `urls.term_patterns` and `urls.author_pattern`, or set them to `null` to leave those archives out.
 
 Register the middleware globally, so it also sees requests no route matches. It answers a 404 for an old path with its redirect and counts the hit:
 

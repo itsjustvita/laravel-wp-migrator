@@ -176,6 +176,17 @@ it('resolves query urls by id', function () {
         ->and(rewrite('<a href="/?utm=1&p='.$post.'">x</a>'))->toBe('<a href="/blog/hello?utm=1">x</a>');
 });
 
+it('points links to the page on the front page at the root', function () {
+    $home = $this->site->page(['post_name' => 'welcome']);
+    $this->site->page(['post_name' => 'about']);
+    $this->site->option('show_on_front', 'page')->option('page_on_front', (string) $home);
+
+    expect(rewrite('<a href="https://old.example.com/welcome/">x</a>'))->toBe('<a href="/">x</a>')
+        ->and(rewrite('<a href="/?page_id='.$home.'">x</a>'))->toBe('<a href="/">x</a>')
+        ->and(rewrite('<a href="/welcome/#top">x</a>'))->toBe('<a href="/#top">x</a>')
+        ->and(rewrite('<a href="/about/">x</a>'))->toBe('<a href="/about">x</a>');
+});
+
 it('makes links to the old front page relative', function () {
     expect(rewrite('<a href="https://old.example.com">x</a>'))->toBe('<a href="/">x</a>')
         ->and(rewrite('<a href="https://old.example.com/">x</a>'))->toBe('<a href="/">x</a>')

@@ -123,6 +123,7 @@ it('serves the imported content through the generated code', function () {
 
     $this->get('/')->assertOk()->assertSee('<h1>Welcome</h1>', false)->assertSee('<title>Welcome</title>', false)->assertDontSee('LARAVEL WELCOME')
         ->assertSee('<a href="/about" >About us</a>', false)->assertSee('<a href="/about/team" >Team</a>', false);
+    $this->get('/welcome')->assertStatus(301)->assertRedirect(url('/'));
     $this->get('/about/team')->assertOk()->assertSee('<main class="template-wide">', false)->assertSee('Body of Team');
     $this->get('/about')->assertOk()->assertSee('<main class="">', false);
     $this->get('/team')->assertNotFound();

@@ -11,9 +11,13 @@ All notable changes to this package are documented here. The format follows [Kee
 ### Changed
 
 - `wp:scaffold` puts routes whose pattern takes a whole path, such as `/blog/{path}`, behind the routes they would hide, such as `/blog/category/{path}` and the author archives.
+- A site without posts gets no category, tag and author archives: the migration plan does not list them, `wp:scaffold` does not write them, and the import writes no redirects for them.
+- `import.excluded_taxonomies` also leaves out `product_type`, `product_visibility`, `product_shipping_class` and `rcb-cookie-group`, which hold data of WooCommerce and Real Cookie Banner. A published configuration keeps its own list.
+- The migration plan and `wp:scaffold` treat the blocks of WooCommerce as part of the shop, which is not migrated: the plan says so instead of asking for views, and `wp:scaffold` writes none.
 
 ### Fixed
 
+- The page WP shows on the front page keeps `/` as its address. Links in the content, menu items and redirects used to point to the URL built from its slug, such as `/home`; that address now redirects to `/`, also in the scaffolded page route. Run `wp:import --force` to map existing content again. A custom URL resolver finds the page marked with `PostReference::$frontPage`.
 - `wp:scaffold` no longer asks to remove the route for `/` from `routes/web.php`. Its own routes are loaded after it and replace it. It warns only when a route for `/` follows the line that loads `routes/wp.php`.
 - The redirects of an author whose slug has letters outside ASCII point to a URL that is encoded once, not twice.
 

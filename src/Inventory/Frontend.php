@@ -65,7 +65,7 @@ final class Frontend
     {
         return array_values(array_filter(
             $this->postTypes(),
-            fn (string $type): bool => $this->hasPages($type) && ! ($type === 'post' && $this->site->reachable && ! isset($this->site->postCounts['post'])),
+            fn (string $type): bool => $this->hasPages($type) && ! ($type === 'post' && ! $this->hasBlog()),
         ));
     }
 
@@ -196,11 +196,20 @@ final class Frontend
         $pattern = $this->config->get('wp-migrator.urls.author_pattern');
         $author = $this->find('author');
 
-        if (! is_string($pattern) && $author === null) {
+        if (! $this->hasBlog() || (! is_string($pattern) && $author === null)) {
             return null;
         }
 
         return new FrontendItem('author', 'Author archive', null, is_string($pattern) ? $pattern : null, 'authors.show', $author ?? $this->find('archive') ?? $this->find('index'));
+    }
+
+    /**
+     * Whether a block belongs to the shop, which is not migrated: the cart,
+     * the checkout and the product lists of WooCommerce need no views.
+     */
+    public function shopBlock(string $name): bool
+    {
+        return str_starts_with($name, 'woocommerce/');
     }
 
     /**
@@ -379,12 +388,27 @@ final class Frontend
     }
 
     /**
+     * Whether the site has posts, and with them the archives of a blog:
+     * categories, tags and authors. A site that could not be read is taken
+     * to have some.
+     */
+    private function hasBlog(): bool
+    {
+        return ! $this->site->reachable || isset($this->site->postCounts['post']);
+    }
+
+    /**
      * Archives the new site needs: those the redirects lead to, and those
-     * the theme has its own template for, unless the site has no terms.
+     * the theme has its own template for, unless the site has no terms or,
+     * for categories and tags, no posts.
      */
     private function needsArchive(string $taxonomy, bool $hasTemplate, bool $hasPattern): bool
     {
         if ($this->site->reachable && ($this->site->taxonomies[$taxonomy] ?? 0) === 0) {
+            return false;
+        }
+
+        if ($this->builtInTaxonomy($taxonomy) && ! $this->hasBlog()) {
             return false;
         }
 

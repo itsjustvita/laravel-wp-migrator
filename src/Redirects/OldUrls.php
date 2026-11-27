@@ -46,9 +46,13 @@ class OldUrls
 
         yield from $this->posts();
         yield from $this->attachments($structure);
-        yield from $this->terms('category', $pretty ? $this->base('category_base', 'category') : null, 'cat');
-        yield from $this->terms('post_tag', $pretty ? $this->base('tag_base', 'tag') : null, 'tag');
-        yield from $this->authors($pretty);
+
+        // The archives of a blog list posts. Without posts they showed nothing, and the new site has no such archives.
+        if ($this->posts->hasType('post')) {
+            yield from $this->terms('category', $pretty ? $this->base('category_base', 'category') : null, 'cat');
+            yield from $this->terms('post_tag', $pretty ? $this->base('tag_base', 'tag') : null, 'tag');
+            yield from $this->authors($pretty);
+        }
     }
 
     /**

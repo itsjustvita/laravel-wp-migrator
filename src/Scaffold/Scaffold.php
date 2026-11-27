@@ -134,10 +134,18 @@ final class Scaffold
             $files[$notFound->viewPath()] = $this->notFound($notFound);
         }
 
+        $shop = 0;
+
         foreach ($this->frontend->site->blocks as $name => $usage) {
-            if ($this->usable($name, self::BLOCK, 'block')) {
+            if ($this->frontend->shopBlock($name)) {
+                $shop++;
+            } elseif ($this->usable($name, self::BLOCK, 'block')) {
                 $files[$this->blockViewPath($name)] = $this->blockView($name, $usage['count']);
             }
+        }
+
+        if ($shop > 0) {
+            $this->notes[] = sprintf('%d %s of WooCommerce got no views: the shop is not migrated.', $shop, $shop === 1 ? 'block' : 'blocks');
         }
 
         return $files;
@@ -446,6 +454,7 @@ final class Scaffold
 
             use Illuminate\\Contracts\\View\\View;
             use Illuminate\\Database\\Eloquent\\Builder;
+            use Illuminate\\Http\\RedirectResponse;
             use Illuminate\\Http\\Request;
             use ItsJustVita\\WpMigrator\\Import\\SourceType;
             use ItsJustVita\\WpMigrator\\Models\\ImportMapEntry;
@@ -478,7 +487,7 @@ final class Scaffold
 
                 public function home(): View
                 {
-                    \$page = self::FRONT_PAGE === null ? null : \$this->published('page')->where('slug', self::FRONT_PAGE)->first();
+                    \$page = \$this->frontPage();
 
                     if (\$page !== null) {
                         return view('home', ['post' => \$page, 'layout' => \$this->layout(\$page)]);
@@ -490,10 +499,15 @@ final class Scaffold
                     ]);
                 }
 
-                public function show(Request \$request): View
+                public function show(Request \$request): View|RedirectResponse
                 {
                     \$type = (string) \$request->route('type');
                     \$post = \$this->find(\$type, \$request);
+
+                    // The front page has one address, as on the old site.
+                    if (\$type === 'page' && \$post->is(\$this->frontPage())) {
+                        return redirect()->route('wp.home', status: 301);
+                    }
                     \$specific = self::TYPES[\$type].'.'.rawurldecode(\$post->slug);
 
                     return view(view()->exists(\$specific) ? \$specific : self::TYPES[\$type].'.show', [
@@ -601,6 +615,11 @@ final class Scaffold
                 private function slugs(string \$slug): array
                 {
                     return array_values(array_unique([\$slug, strtolower(rawurlencode(\$slug))]));
+                }
+
+                private function frontPage(): ?Post
+                {
+                    return self::FRONT_PAGE === null ? null : \$this->published('page')->where('slug', self::FRONT_PAGE)->first();
                 }
 
                 /**

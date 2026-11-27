@@ -69,6 +69,20 @@ it('imports classic menus with their locations', function () {
     ]);
 });
 
+it('links the page on the front page to the root', function () {
+    $this->site->option('show_on_front', 'page')->option('page_on_front', (string) $this->about);
+    $main = $this->site->menu('Main', 'main');
+    $this->site->menuItem($main, ['title' => 'Home', 'order' => 1, 'type' => 'post_type', 'object' => 'page', 'object_id' => $this->about]);
+    $this->site->menuItem($main, ['title' => 'Team', 'order' => 2, 'type' => 'post_type', 'object' => 'page', 'object_id' => $this->team]);
+
+    importMenus();
+
+    expect(array_map(fn (array $item): array => [$item['title'], $item['url'], $item['linkable']], menuItems('main')))->toBe([
+        ['Home', '/', 'Post:About us'],
+        ['Team', '/about/team', 'Post:Team'],
+    ]);
+});
+
 it('imports menu items in order, nested, with their targets', function () {
     $main = $this->site->menu('Main', 'main');
     $this->site->menuItem($main, ['title' => 'Home', 'order' => 1, 'url' => 'https://old.example.com/']);
