@@ -308,6 +308,32 @@ it('maps a custom post type onto an application model and skips what the mapper 
         ->and($report->skippedItems()[0]['source_id'])->toBe($draft);
 });
 
+it('keeps a row mapped to its record while the mapper declines it', function () {
+    Schema::create('events', function ($table) {
+        $table->id();
+        $table->string('title');
+        $table->string('starts_at')->nullable();
+        $table->timestamps();
+    });
+    WpMigrator::mapPostType('event', EventPostMapper::class);
+    $site = $this->source();
+    $concert = $site->post(['post_title' => 'Concert', 'post_type' => 'event']);
+    runImport(new ImportOptions(only: ['posts']));
+    $event = Event::query()->sole();
+
+    $site->table('posts')->where('ID', $concert)->update(['post_status' => 'draft']);
+    $report = runImport(new ImportOptions(only: ['posts']));
+
+    expect($report->counts()['posts']['skipped'])->toBe(1)
+        ->and(ImportMapEntry::query()->where('source_id', $concert)->sole()->target_id)->toBe($event->id);
+
+    $site->table('posts')->where('ID', $concert)->update(['post_status' => 'publish', 'post_title' => 'Concert, again']);
+    runImport(new ImportOptions(only: ['posts']));
+
+    expect(Event::query()->sole()->title)->toBe('Concert, again')
+        ->and(Event::query()->sole()->id)->toBe($event->id);
+});
+
 it('adds unsupported content to the report', function () {
     $site = $this->source();
     $landing = $site->page(['post_title' => 'Landing']);

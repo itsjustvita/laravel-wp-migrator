@@ -2,6 +2,14 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses [Semantic Versioning](https://semver.org/). Since 1.0, breaking changes to the public API come only with a new major version; the README lists what the public API covers.
 
+## [Unreleased]
+
+### Fixed
+
+- Menu items that link to a trashed or deleted post are left out, as WP hides them. They used to be imported as entries without a link.
+- When the content a menu item links to is no longer published, the entries below that item move up one level instead of being deleted with it, and `wp:import --force` no longer fails for them with a foreign key error.
+- A row whose mapper deleted its record and returned nothing is forgotten, so other rows no longer resolve references to a record that is gone.
+
 ## [1.4.0] - 2026-11-18
 
 ### Added

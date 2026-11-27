@@ -165,6 +165,9 @@ abstract class EntityImporter implements Importer
                         $context->rowIncomplete() ? '' : $checksum,
                         $context->rowLinked() || $entry?->linked === true,
                     );
+                } elseif ($entry !== null && $this->map->target($entry) === null) {
+                    // The mapper deleted what the row had become. Other rows must not resolve to a record that is gone.
+                    $entry->delete();
                 }
 
                 return $model;

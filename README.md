@@ -245,7 +245,7 @@ Classic menus become rows in `menus` with their theme locations, and their items
 @endforeach
 ```
 
-Links to post type archives have no new URL and are listed in the report. Like WP, the import leaves out menu items that link to drafts, private or scheduled posts, and it drops links that could run script, such as `javascript:` URLs.
+Links to post type archives have no new URL and are listed in the report. Like WP, the import leaves out menu items that link to drafts, private, scheduled, trashed or deleted posts; the entries below such an item move up one level. It drops links that could run script, such as `javascript:` URLs.
 
 ### Comments
 

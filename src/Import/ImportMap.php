@@ -6,6 +6,7 @@ namespace ItsJustVita\WpMigrator\Import;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use ItsJustVita\WpMigrator\Models\ImportMapEntry;
 
 /**
@@ -43,6 +44,20 @@ class ImportMap
                 'imported_at' => now(),
             ],
         );
+    }
+
+    /**
+     * The record a source row became, or null when it no longer exists.
+     */
+    public function target(ImportMapEntry $entry): ?Model
+    {
+        $class = Relation::getMorphedModel($entry->target_type) ?? $entry->target_type;
+
+        if (! is_subclass_of($class, Model::class)) {
+            return null;
+        }
+
+        return $class::query()->find($entry->target_id);
     }
 
     /**

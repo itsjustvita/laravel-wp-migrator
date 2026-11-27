@@ -38,6 +38,9 @@ abstract class TestCase extends Orchestra
             'foreign_key_constraints' => false,
         ]);
 
+        // As in an application, and as MySQL and MariaDB do in any case.
+        $app['config']->set('database.connections.testing.foreign_key_constraints', true);
+
         if (self::usesServerDatabase()) {
             $server = [
                 'driver' => getenv('WP_MIGRATOR_TEST_DB_DRIVER') ?: 'mysql',

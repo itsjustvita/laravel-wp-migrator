@@ -9,6 +9,7 @@ use ItsJustVita\WpMigrator\Import\ImportOptions;
 use ItsJustVita\WpMigrator\Import\ImportReport;
 use ItsJustVita\WpMigrator\Import\ImportRunner;
 use ItsJustVita\WpMigrator\Mapping\MenuMapper;
+use ItsJustVita\WpMigrator\Models\ImportMapEntry;
 use ItsJustVita\WpMigrator\Models\Menu;
 use ItsJustVita\WpMigrator\Models\MenuItem;
 use ItsJustVita\WpMigrator\Source\Dto\SourceMenu;
@@ -105,14 +106,29 @@ it('imports a child before it would need its parent', function () {
 });
 
 it('reports links to content that was not imported and keeps the item', function () {
-    $draft = $this->site->page(['post_title' => 'Secret', 'post_status' => 'trash', 'post_author' => 0]);
+    config()->set('wp-migrator.import.excluded_post_types', [...config('wp-migrator.import.excluded_post_types'), 'product']);
+    $product = $this->site->post(['post_title' => 'Shoes', 'post_type' => 'product', 'post_author' => 0]);
     $main = $this->site->menu('Main', 'main');
-    $this->site->menuItem($main, ['title' => 'Gone', 'type' => 'post_type', 'object' => 'page', 'object_id' => $draft]);
+    $this->site->menuItem($main, ['title' => 'Shoes', 'type' => 'post_type', 'object' => 'product', 'object_id' => $product]);
 
     $report = importMenus();
 
-    expect(menuItems('main'))->toBe([['title' => 'Gone', 'url' => null, 'parent' => null, 'linkable' => null, 'target' => null, 'classes' => null]])
+    expect(menuItems('main'))->toBe([['title' => 'Shoes', 'url' => null, 'parent' => null, 'linkable' => null, 'target' => null, 'classes' => null]])
         ->and(array_column($report->unresolvedReferences(), 'kind'))->toBe(['menu link']);
+});
+
+it('leaves out items that link to trashed or deleted content, like WP does', function () {
+    $trashed = $this->site->page(['post_title' => 'Trashed', 'post_status' => 'trash', 'post_author' => 0]);
+    $main = $this->site->menu('Main', 'main');
+    $this->site->menuItem($main, ['title' => 'Trashed', 'type' => 'post_type', 'object' => 'page', 'object_id' => $trashed]);
+    $this->site->menuItem($main, ['title' => 'Deleted', 'type' => 'post_type', 'object' => 'page', 'object_id' => 9999]);
+    $this->site->menuItem($main, ['title' => 'Kept', 'type' => 'post_type', 'object' => 'page', 'object_id' => $this->about]);
+
+    $report = importMenus();
+
+    expect(MenuItem::query()->pluck('title')->all())->toBe(['Kept'])
+        ->and($report->unresolvedReferences())->toBe([])
+        ->and(collect($report->skippedItems())->pluck('reason')->all())->toBe(['it links to content that is not published', 'it links to content that is not published']);
 });
 
 it('warns about links to post type archives', function () {
@@ -264,6 +280,30 @@ it('removes an item when the content it links to is no longer published', functi
 
     expect(MenuItem::count())->toBe(0);
 });
+
+it('keeps the entries below an item whose content is no longer published', function (bool $force) {
+    $main = $this->site->menu('Main', 'main');
+    $parent = $this->site->menuItem($main, ['title' => 'About', 'type' => 'post_type', 'object' => 'page', 'object_id' => $this->about]);
+    $this->site->menuItem($main, ['title' => 'Partner', 'url' => 'https://example.net/', 'parent' => $parent]);
+    importMenus();
+    $this->site->table('posts')->where('ID', $this->about)->update(['post_status' => 'private']);
+    // Without force, only the changed parent item is mapped again.
+    $this->site->table('posts')->where('ID', $parent)->update(['post_title' => 'About us']);
+    $options = new ImportOptions(only: ['posts', 'pages', 'terms', 'menus'], force: $force);
+
+    $report = app(ImportRunner::class)->run($options);
+
+    expect($report->errors())->toBe([])
+        ->and(MenuItem::query()->pluck('title')->all())->toBe(['Partner'])
+        ->and(MenuItem::query()->sole()->parent_id)->toBeNull();
+
+    $again = app(ImportRunner::class)->run($options);
+
+    expect($again->errors())->toBe([])
+        ->and(MenuItem::query()->pluck('title')->all())->toBe(['Partner'])
+        ->and(MenuItem::query()->sole()->parent_id)->toBeNull()
+        ->and(ImportMapEntry::query()->where('source_id', $parent)->exists())->toBeFalse();
+})->with(['after a change' => false, 'with force' => true]);
 
 it('leaves unpublished and unsafe links out of navigation menus', function () {
     $draft = $this->site->page(['post_title' => 'Draft page', 'post_status' => 'draft', 'post_author' => 0]);

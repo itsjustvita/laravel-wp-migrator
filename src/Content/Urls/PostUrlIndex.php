@@ -98,6 +98,17 @@ class PostUrlIndex
         return $this->byId[$id] ?? null;
     }
 
+    /**
+     * Whether the post was trashed or deleted. A post that only the
+     * configuration leaves out is not gone.
+     */
+    public function isGone(int $id): bool
+    {
+        $status = $this->db->table('posts')->where('ID', $id)->value('post_status');
+
+        return $status === null || $status === 'trash';
+    }
+
     private function load(): void
     {
         if ($this->loaded) {

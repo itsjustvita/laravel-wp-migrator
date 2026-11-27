@@ -31,7 +31,12 @@ class DefaultMenuItemMapper implements MenuItemMapper
         $link = $this->link($item, $context);
 
         if ($link->unpublished) {
-            $existing?->delete();
+            if ($existing !== null) {
+                // Its submenu entries would be deleted with it, although the old site still has them.
+                MenuItem::query()->where('parent_id', $existing->id)->update(['parent_id' => $existing->parent_id]);
+                $existing->delete();
+            }
+
             $context->skip('it links to content that is not published');
 
             return null;

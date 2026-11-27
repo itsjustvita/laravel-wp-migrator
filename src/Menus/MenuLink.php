@@ -7,7 +7,7 @@ namespace ItsJustVita\WpMigrator\Menus;
 final readonly class MenuLink
 {
     /**
-     * @param  bool  $unpublished  the link points to a draft, private or scheduled post
+     * @param  bool  $unpublished  the link points to a draft, private, scheduled, trashed or deleted post
      */
     public function __construct(
         public ?string $url,

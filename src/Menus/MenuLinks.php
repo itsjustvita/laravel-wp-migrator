@@ -30,8 +30,8 @@ class MenuLinks
     {
         $reference = $this->posts->findById($postId);
 
-        // WP hides menu entries for drafts and private posts; so does the import.
-        if ($reference !== null && $reference->status !== 'publish') {
+        // WP hides menu entries for drafts, private, trashed and deleted posts; so does the import.
+        if ($reference === null ? $this->posts->isGone($postId) : $reference->status !== 'publish') {
             return MenuLink::unpublished();
         }
 
