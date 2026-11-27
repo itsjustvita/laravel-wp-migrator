@@ -21,6 +21,17 @@ class MediaReader extends Reader
     }
 
     /**
+     * Which of the given attachments still exist.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function existing(array $ids): array
+    {
+        return self::ids($this->query(new MediaFilter)->whereIn('ID', $ids)->pluck('ID')->all());
+    }
+
+    /**
      * @return Generator<int, list<SourceMedia>>
      */
     public function chunks(MediaFilter $filter): Generator

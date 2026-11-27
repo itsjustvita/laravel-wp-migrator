@@ -41,7 +41,7 @@ final class NavigationImporter extends EntityImporter
         return $this->reader->count(self::filter());
     }
 
-    private static function filter(): PostFilter
+    public static function filter(): PostFilter
     {
         return new PostFilter(types: ['wp_navigation'], statuses: ['publish']);
     }

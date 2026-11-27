@@ -18,6 +18,19 @@ class TermReader extends Reader
     }
 
     /**
+     * Which of the given terms the filter still selects.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function existing(array $ids, TermFilter $filter): array
+    {
+        $column = $this->db->tableName('term_taxonomy').'.term_id';
+
+        return self::ids($this->query($filter)->whereIn($column, $ids)->pluck($column)->all());
+    }
+
+    /**
      * @return Generator<int, list<SourceTerm>>
      */
     public function chunks(TermFilter $filter): Generator

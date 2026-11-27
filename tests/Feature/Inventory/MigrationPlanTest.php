@@ -526,3 +526,9 @@ it('lists the installed plugins when none is active', function () {
         ->toContain("## Plugins\n\n- [ ] **hello** (`hello.php`), unknown:")
         ->not->toContain('These are installed');
 });
+
+it('ends with the steps up to going live', function () {
+    expect(renderPlan(planTheme()))
+        ->toContain("## Next steps\n\n1. Run `php artisan wp:import --dry-run`")
+        ->toContain('4. Shortly before going live, run `php artisan wp:import --prune` once more');
+});

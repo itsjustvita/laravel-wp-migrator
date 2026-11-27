@@ -22,6 +22,17 @@ class CommentReader extends Reader
     }
 
     /**
+     * Which of the given comments are still read.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function existing(array $ids): array
+    {
+        return self::ids($this->query(null)->whereIn('comment_ID', $ids)->pluck('comment_ID')->all());
+    }
+
+    /**
      * @return Generator<int, list<SourceComment>>
      */
     public function chunks(?CarbonImmutable $since = null): Generator

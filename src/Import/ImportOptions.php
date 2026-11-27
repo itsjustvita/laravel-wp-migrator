@@ -19,6 +19,7 @@ final readonly class ImportOptions
      * @param  CarbonImmutable|null  $since  only posts and media modified at or after this moment
      * @param  bool  $dryRun  roll everything back at the end and copy no files
      * @param  bool  $force  map rows again even when their checksum is unchanged
+     * @param  bool  $prune  remove what earlier runs imported and the old site no longer has
      */
     public function __construct(
         public ?array $only = null,
@@ -26,6 +27,7 @@ final readonly class ImportOptions
         public ?CarbonImmutable $since = null,
         public bool $dryRun = false,
         public bool $force = false,
+        public bool $prune = false,
     ) {}
 
     public function includes(string $importer): bool

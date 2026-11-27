@@ -54,6 +54,7 @@ php artisan wp:import
 php artisan wp:import --dry-run
 php artisan wp:import --only=users,media
 php artisan wp:import --type=event --since=2026-10-01
+php artisan wp:import --prune
 ```
 
 | Option | Effect |
@@ -63,8 +64,19 @@ php artisan wp:import --type=event --since=2026-10-01
 | `--since` | Only posts and media modified on or after this date. |
 | `--dry-run` | Rolls every change back at the end and copies no files. |
 | `--force` | Maps rows again even when they are unchanged, for example after changing the configuration. |
+| `--prune` | Also removes what an earlier run imported and the old site no longer has. Not together with `--only` or `--type`. |
 
 Imports are idempotent. Unchanged rows are skipped, changed rows are updated, and an aborted run can simply be started again. A post that refers to a post imported later in the same run is mapped once more at the end of the run. Whatever still cannot be resolved is mapped again on the next run. Every run writes a report to `storage/logs/wp-migrator-<timestamp>.md`.
+
+Content that was deleted on the old site stays in the application until an import runs with `--prune`. It removes what an earlier run imported and the import no longer reads, because it was deleted or trashed on the old site or because the configuration leaves it out since: posts, pages and other post types, media with their files, terms, menus, menu items and comments. Their SEO data goes with them, as do the menu items that link to them and the redirects to URLs that nothing else has. Three kinds of records stay:
+
+- Users are never deleted, since the accounts belong to the application. The report warns about each account that is gone from the old site, because it can still log in.
+- Records the import only linked, such as a user that already existed, are left alone.
+- A record that several rows of the old site were merged into stays until the last of them is gone.
+
+The models of custom mappers are deleted through Eloquent, so model events and soft deletes apply. `--prune` compares everything that was imported with the whole site, which is why it cannot be combined with `--only` or `--type`. In a terminal it lists how many records of each kind are about to go and asks first. With `--no-interaction` it removes them without asking; a script that passes neither a terminal nor that option removes nothing. `--dry-run --prune` removes nothing and lists in the report what would go.
+
+The pages below a removed page move to the top level, which changes their URLs. Run `wp:import --force` afterwards, so menus and links in the content follow.
 
 Media files are only copied when their extension is listed in `media.allowed_extensions`. Files a web server could execute, such as `.php`, are never copied, also not behind a second extension like `shell.php.jpg`: hacked sites often hide a backdoor in their uploads. SVG and HTML files can run script in the browser and are left out by default.
 
@@ -349,7 +361,7 @@ class EventMapper implements PostMapper
 2. **Plan.** Run `php artisan wp:inventory` and read `docs/wp-migration-plan.md`. Before the first import, check the administrator accounts and the suspicious content it lists, leave out post types that hold data rather than content, and decide on the URL patterns in the `urls` section of the configuration: links in the content, menu items and redirects are built from them.
 3. **Import.** Run `php artisan wp:import --dry-run`, read the report in `storage/logs`, then run `php artisan wp:import`. The report lists unknown shortcodes, blocks without a view and links it could not resolve.
 4. **Build the frontend.** Run `php artisan wp:scaffold` for a working start: routes, a controller and plain views for everything in the plan. Then work through the plan: style the views, give blocks and widgets their markup and write shortcode handlers. Run `php artisan wp:import --force` after changing handlers, mappers or URL patterns, so unchanged rows are mapped again.
-5. **Import the changes.** Shortly before going live, take a fresh copy of the database and the uploads and run `php artisan wp:import` again. It only brings over what changed. Posts that were deleted or trashed on the old site in the meantime stay in the new one, so remove them by hand.
+5. **Import the changes.** Shortly before going live, take a fresh copy of the database and the uploads and run `php artisan wp:import` again. It only brings over what changed. Add `--prune` to also remove what was deleted or trashed on the old site in the meantime; `--dry-run --prune` shows first what would go.
 6. **Switch.** Set `HASH_DRIVER=wordpress`, register the `RedirectMissingPages` middleware or export the redirects for the web server, point the DNS at the new application, and keep the old site and its database as a backup. With the middleware, the `hits` column of `redirects` shows which old URLs are still requested, and `php artisan wp:password-stats` shows how many users still have an old hash.
 
 ## Versioning

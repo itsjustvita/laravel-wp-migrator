@@ -20,6 +20,17 @@ class PostReader extends Reader
     }
 
     /**
+     * Which of the given posts the filter still selects.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function existing(array $ids, PostFilter $filter): array
+    {
+        return self::ids($this->query($filter)->whereIn('ID', $ids)->pluck('ID')->all());
+    }
+
+    /**
      * IDs of the matching posts grouped by depth in the parent hierarchy,
      * top level first, so parents are imported before their children.
      * Posts whose parent is outside the selection count as top level.

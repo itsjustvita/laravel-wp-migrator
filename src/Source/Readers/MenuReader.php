@@ -17,6 +17,17 @@ class MenuReader extends Reader
     }
 
     /**
+     * Which of the given menus still exist.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function existing(array $ids): array
+    {
+        return self::ids($this->db->table('term_taxonomy')->where('taxonomy', 'nav_menu')->whereIn('term_id', $ids)->pluck('term_id')->all());
+    }
+
+    /**
      * @return Generator<int, list<SourceMenu>>
      */
     public function chunks(): Generator

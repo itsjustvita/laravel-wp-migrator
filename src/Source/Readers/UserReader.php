@@ -20,6 +20,17 @@ class UserReader extends Reader
     }
 
     /**
+     * Which of the given users still exist, whether the import leaves them out or not.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function existing(array $ids): array
+    {
+        return self::ids($this->db->table('users')->whereIn('ID', $ids)->pluck('ID')->all());
+    }
+
+    /**
      * @return Generator<int, list<SourceUser>>
      */
     public function chunks(UserFilter $filter): Generator

@@ -116,3 +116,86 @@ it('counts the suspicious content in the summary', function () {
 
     expect(Artisan::output())->toMatch('/Suspicious content \.+ 0/');
 });
+
+it('asks before it prunes and removes what is gone from the old site', function () {
+    $site = $this->source();
+    $gone = $site->post(['post_title' => 'Gone', 'post_author' => 0]);
+    $site->post(['post_title' => 'Kept', 'post_author' => 0]);
+    $this->artisan('wp:import')->assertSuccessful();
+    $site->table('posts')->where('ID', $gone)->delete();
+
+    $this->artisan('wp:import', ['--prune' => true])
+        ->expectsOutputToContain('Gone from the old site, and about to be removed here:')
+        ->expectsConfirmation('Remove them from this application?', 'no')
+        ->expectsOutputToContain('Nothing is removed. In a script, pass --no-interaction to prune without the question.')
+        ->assertSuccessful();
+
+    expect(Post::query()->pluck('title')->all())->toBe(['Gone', 'Kept']);
+
+    $this->artisan('wp:import', ['--prune' => true])
+        ->expectsConfirmation('Remove them from this application?', 'yes')
+        ->doesntExpectOutputToContain('Nothing is removed.')
+        ->assertSuccessful();
+
+    expect(Post::query()->pluck('title')->all())->toBe(['Kept']);
+});
+
+it('prunes without asking when it cannot ask', function () {
+    $site = $this->source();
+    $gone = $site->post(['post_title' => 'Gone', 'post_author' => 0]);
+    $site->post(['post_title' => 'Kept', 'post_author' => 0]);
+    Artisan::call('wp:import');
+    $site->table('posts')->where('ID', $gone)->delete();
+
+    expect(Artisan::call('wp:import', ['--prune' => true, '--no-interaction' => true]))->toBe(0);
+
+    expect(Artisan::output())
+        ->toContain('Gone from the old site, and about to be removed here:')
+        ->toMatch('/Posts[ .]+1\s/')
+        ->toMatch('/Removed[ .]+1\s/')
+        ->not->toContain('Remove them from this application?')
+        ->and(Post::query()->pluck('title')->all())->toBe(['Kept']);
+});
+
+it('shows in a dry run what pruning would remove', function () {
+    $site = $this->source();
+    $gone = $site->post(['post_title' => 'Gone', 'post_author' => 0]);
+    Artisan::call('wp:import');
+    $site->table('posts')->where('ID', $gone)->delete();
+
+    expect(Artisan::call('wp:import', ['--prune' => true, '--dry-run' => true]))->toBe(0);
+
+    $files = glob($this->reports.'/wp-migrator-*.md') ?: [];
+
+    expect(Artisan::output())
+        ->toMatch('/Would be removed[ .]+1\s/')
+        ->not->toContain('about to be removed')
+        ->and(Post::count())->toBe(1)
+        ->and(implode('', array_map(file_get_contents(...), $files)))->toContain('## Would be removed (1)');
+});
+
+it('mentions removals only when pruning', function () {
+    $this->source()->post(['post_title' => 'Hello', 'post_author' => 0]);
+
+    Artisan::call('wp:import');
+    expect(Artisan::output())->not->toContain('Removed');
+
+    Artisan::call('wp:import', ['--prune' => true]);
+    expect(Artisan::output())->toMatch('/Removed[ .]+0\s/')->not->toContain('Gone from the old site');
+});
+
+it('prunes only when the whole site is imported', function (array $options) {
+    $site = $this->source();
+    $gone = $site->post(['post_title' => 'Gone', 'post_author' => 0]);
+    Artisan::call('wp:import');
+    $site->table('posts')->where('ID', $gone)->delete();
+
+    $this->artisan('wp:import', ['--prune' => true, ...$options])
+        ->expectsOutputToContain('--prune compares the whole site with what was imported. Run it without --only and --type.')
+        ->assertFailed();
+
+    expect(Post::count())->toBe(1);
+})->with([
+    'only' => [['--only' => 'posts']],
+    'type' => [['--type' => 'post']],
+]);

@@ -20,7 +20,8 @@ class ImportCommand extends Command
         {--type= : Comma-separated post types to import}
         {--since= : Only import posts and media modified on or after this date}
         {--dry-run : Roll everything back at the end and copy no files}
-        {--force : Map rows again even when they are unchanged, e.g. after changing the configuration}';
+        {--force : Map rows again even when they are unchanged, e.g. after changing the configuration}
+        {--prune : Remove what earlier runs imported and the old site no longer has}';
 
     protected $description = 'Import the content of the WP site; unchanged rows are skipped on later runs';
 
@@ -44,6 +45,12 @@ class ImportCommand extends Command
             if (in_array('comments', $only, true) && ! $config->boolean('wp-migrator.comments.enabled')) {
                 $this->components->warn('Comments are turned off. Set wp-migrator.comments.enabled to import them.');
             }
+        }
+
+        if ($this->option('prune') && ($only !== null || $this->listOption('type') !== null)) {
+            $this->components->error('--prune compares the whole site with what was imported. Run it without --only and --type.');
+
+            return self::FAILURE;
         }
 
         $since = null;
@@ -79,6 +86,7 @@ class ImportCommand extends Command
             since: $since,
             dryRun: (bool) $this->option('dry-run'),
             force: (bool) $this->option('force'),
+            prune: (bool) $this->option('prune'),
         );
 
         if ($options->dryRun) {
@@ -87,9 +95,9 @@ class ImportCommand extends Command
 
         $this->newLine();
 
-        $report = $runner->run($options, new ConsoleProgress($this->output));
+        $report = $runner->run($options, new ConsoleProgress($this->output), $this->confirmPrune(...));
 
-        $this->printSummary($report);
+        $this->printSummary($report, $options);
 
         $path = $report->save($config->string('wp-migrator.report.directory'));
         $this->components->info('Report written to '.$path);
@@ -104,7 +112,39 @@ class ImportCommand extends Command
         return self::SUCCESS;
     }
 
-    private function printSummary(ImportReport $report): void
+    /**
+     * Shows what is gone from the old site and asks before it is removed
+     * here. With --no-interaction the option itself is the answer; without
+     * a terminal and without that option, the question answers itself with no.
+     *
+     * @param  array<string, int>  $counts
+     */
+    private function confirmPrune(array $counts): bool
+    {
+        $this->components->warn('Gone from the old site, and about to be removed here:');
+
+        foreach ($counts as $kind => $count) {
+            $this->components->twoColumnDetail(ucfirst($kind), (string) $count);
+        }
+
+        $this->newLine();
+
+        if (! $this->input->isInteractive()) {
+            return true;
+        }
+
+        $confirmed = $this->components->confirm('Remove them from this application?');
+
+        if (! $confirmed) {
+            $this->components->info('Nothing is removed. In a script, pass --no-interaction to prune without the question.');
+        }
+
+        $this->newLine();
+
+        return $confirmed;
+    }
+
+    private function printSummary(ImportReport $report, ImportOptions $options): void
     {
         $rows = [];
 
@@ -117,6 +157,10 @@ class ImportCommand extends Command
 
         if ($rows !== []) {
             $this->table(['Importer', 'Created', 'Updated', 'Unchanged', 'Skipped', 'Failed'], $rows);
+        }
+
+        if ($options->prune) {
+            $this->components->twoColumnDetail($report->dryRun ? 'Would be removed' : 'Removed', (string) count($report->removedItems()));
         }
 
         $this->components->twoColumnDetail('Warnings', (string) count($report->warnings()));

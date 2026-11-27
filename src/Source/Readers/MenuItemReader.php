@@ -24,6 +24,19 @@ class MenuItemReader extends Reader
     }
 
     /**
+     * Which of the given menu items are still read.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function existing(array $ids): array
+    {
+        $column = $this->db->tableName('posts').'.ID';
+
+        return self::ids($this->query()->whereIn($column, $ids)->pluck($column)->all());
+    }
+
+    /**
      * @return Generator<int, list<SourceMenuItem>>
      */
     public function chunks(): Generator

@@ -47,6 +47,11 @@ final class ImportReport
     /** @var list<string> */
     private array $notes = [];
 
+    /** @var list<array{kind: string, source_id: int, what: string}> */
+    private array $removed = [];
+
+    private int $removedRedirects = 0;
+
     /** @var array<string, array{count: int, post_ids: list<int>}> */
     private array $unknownShortcodes = [];
 
@@ -179,6 +184,36 @@ final class ImportReport
     }
 
     /**
+     * Something an earlier run imported and this one removed, because it is
+     * gone from the old site.
+     */
+    public function removed(string $kind, int $sourceId, string $what): void
+    {
+        $this->removed[] = ['kind' => $kind, 'source_id' => $sourceId, 'what' => $what];
+    }
+
+    /**
+     * @return list<array{kind: string, source_id: int, what: string}>
+     */
+    public function removedItems(): array
+    {
+        return $this->removed;
+    }
+
+    public function addRemovedRedirects(int $count): void
+    {
+        $this->removedRedirects += $count;
+    }
+
+    /**
+     * How many redirects went with the removed content they pointed to.
+     */
+    public function removedRedirects(): int
+    {
+        return $this->removedRedirects;
+    }
+
+    /**
      * The current extent of everything a row can add, to undo it later.
      *
      * @return array{lists: array<string, int>, unknownShortcodes: array<string, array{count: int, post_ids: list<int>}>, unknownBlocks: array<string, array{count: int, post_ids: list<int>}>}
@@ -297,6 +332,20 @@ final class ImportReport
                 fn (string $outcome): int => $counts[$outcome],
                 self::OUTCOMES,
             )).' |';
+        }
+
+        if ($this->removed !== []) {
+            $lines[] = '';
+            $lines[] = sprintf('## %s (%d)', $this->dryRun ? 'Would be removed' : 'Removed', count($this->removed));
+            $lines[] = '';
+
+            foreach ($this->removed as $item) {
+                $lines[] = '- '.str_replace(["\r\n", "\n"], ' ', sprintf('%s #%d: %s', $item['kind'], $item['source_id'], $item['what']));
+            }
+
+            if ($this->removedRedirects > 0) {
+                $lines[] = sprintf('- redirects: %d that pointed to them', $this->removedRedirects);
+            }
         }
 
         $this->section($lines, 'Suspicious content', array_map(

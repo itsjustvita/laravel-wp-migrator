@@ -46,6 +46,15 @@ abstract class Reader
     }
 
     /**
+     * @param  array<array-key, mixed>  $values
+     * @return list<int>
+     */
+    protected static function ids(array $values): array
+    {
+        return array_values(array_map(self::int(...), $values));
+    }
+
+    /**
      * WP uses 0 for "no parent" and "no author".
      */
     protected static function idOrNull(mixed $value): ?int

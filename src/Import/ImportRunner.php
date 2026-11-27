@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ItsJustVita\WpMigrator\Import;
 
+use Closure;
 use Illuminate\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Connection;
@@ -35,6 +36,8 @@ use ItsJustVita\WpMigrator\WpMigrator;
 /**
  * Runs the importers in dependency order: users, media, terms, posts, menus,
  * comments and finally the redirects, which point to what the others imported.
+ * With the prune option, what is gone from the old site is removed before
+ * the redirects are written.
  */
 class ImportRunner
 {
@@ -60,7 +63,10 @@ class ImportRunner
         private readonly Repository $config,
     ) {}
 
-    public function run(ImportOptions $options, ImportProgress $progress = new NullProgress): ImportReport
+    /**
+     * @param  (Closure(array<string, int>): bool)|null  $confirmPrune  asked before pruning removes anything, with the number of records of each kind
+     */
+    public function run(ImportOptions $options, ImportProgress $progress = new NullProgress, ?Closure $confirmPrune = null): ImportReport
     {
         $this->container->make(WpMigrator::class)->forgetInstances();
 
@@ -91,6 +97,10 @@ class ImportRunner
 
         try {
             foreach (self::IMPORTERS as $class) {
+                if ($options->prune && $class === RedirectImporter::class) {
+                    $this->container->make(Pruner::class)->run($report, $progress, $options->dryRun, $confirmPrune);
+                }
+
                 $importer = $this->container->make($class);
 
                 if (! $importer->shouldRun($options)) {

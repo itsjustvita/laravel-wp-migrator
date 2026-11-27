@@ -4,6 +4,10 @@ All notable changes to this package are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `wp:import --prune` removes what an earlier run imported and the old site no longer has: posts, pages and other post types, media with their files, terms, menus, menu items and comments that were deleted or trashed there, or that the configuration leaves out since. Their SEO data, the menu items that link to them and the redirects to URLs nothing else has go with them. Users are never deleted; the report warns about accounts that are gone from the old site. Records the import only linked stay, and so does a record as long as another row of the old site maps to it. In a terminal the command lists what is about to go and asks first, `--no-interaction` skips the question, a script without either removes nothing, and `--dry-run --prune` only lists it in the report. `--prune` cannot be combined with `--only` or `--type`.
+
 ### Fixed
 
 - Menu items that link to a trashed or deleted post are left out, as WP hides them. They used to be imported as entries without a link.

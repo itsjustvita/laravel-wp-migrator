@@ -732,7 +732,7 @@ class MigrationPlan
             '1. Run `php artisan wp:import --dry-run`, then `php artisan wp:import`, and read the report in `storage/logs`.',
             '2. Build the items above. Render content with `<x-wp-blocks :blocks="$post->blocks" />` and the SEO tags with `<x-wp-seo :model="$post" />`.',
             '3. After changing handlers, block views or URL patterns, run `php artisan wp:import --force` to map the content again.',
-            '4. Shortly before going live, run `php artisan wp:import` once more to bring over what changed, register the redirect middleware and switch the DNS.',
+            '4. Shortly before going live, run `php artisan wp:import --prune` once more to bring over what changed and to remove what the old site no longer has, register the redirect middleware and switch the DNS.',
         ]);
     }
 
