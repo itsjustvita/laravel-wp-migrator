@@ -2,6 +2,21 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses [Semantic Versioning](https://semver.org/). Since 1.0, breaking changes to the public API come only with a new major version; the README lists what the public API covers.
 
+## [Unreleased]
+
+### Added
+
+- `wp:scaffold` writes the author archives: a route from `urls.author_pattern`, a controller action and the view `authors/show`. The controller lists the authors that have posts, each slug with the ID the user had on the old site, and finds the user through the import map; a pattern with `{id}` needs no list. Author slugs that cannot be used in code safely are left out with a note.
+
+### Changed
+
+- `wp:scaffold` puts routes whose pattern takes a whole path, such as `/blog/{path}`, behind the routes they would hide, such as `/blog/category/{path}` and the author archives.
+
+### Fixed
+
+- `wp:scaffold` no longer asks to remove the route for `/` from `routes/web.php`. Its own routes are loaded after it and replace it. It warns only when a route for `/` follows the line that loads `routes/wp.php`.
+- The redirects of an author whose slug has letters outside ASCII point to a URL that is encoded once, not twice.
+
 ## [1.5.0] - 2026-11-27
 
 ### Added

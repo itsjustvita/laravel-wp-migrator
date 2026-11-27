@@ -25,6 +25,7 @@ final readonly class SiteFacts
      * @param  list<string>|null  $queryVars  query variables of the rewrite rules, null without pretty permalinks
      * @param  list<Finding>  $suspicious  signs of a hacked site
      * @param  string|null  $frontPage  the slug of the page shown on the front page, null for the latest posts
+     * @param  array<array-key, int>  $authors  the imported users with an author archive: its slug => their ID on the old site
      */
     public function __construct(
         public bool $reachable,
@@ -48,6 +49,7 @@ final readonly class SiteFacts
         public int $elementorPages = 0,
         public array $suspicious = [],
         public ?string $frontPage = null,
+        public array $authors = [],
     ) {}
 
     public static function unreachable(string $error): self

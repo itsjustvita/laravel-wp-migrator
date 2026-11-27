@@ -14,6 +14,7 @@ use ItsJustVita\WpMigrator\Content\Urls\UrlResolver;
 use ItsJustVita\WpMigrator\Import\ImportMap;
 use ItsJustVita\WpMigrator\Import\SourceType;
 use ItsJustVita\WpMigrator\Models\Media;
+use ItsJustVita\WpMigrator\Source\SourceStats;
 use ItsJustVita\WpMigrator\Source\WpDatabase;
 
 /**
@@ -32,6 +33,7 @@ class OldUrls
         private readonly ImportMap $map,
         private readonly MediaUrls $media,
         private readonly Repository $config,
+        private readonly SourceStats $stats,
     ) {}
 
     /**
@@ -141,24 +143,13 @@ class OldUrls
      */
     private function authors(bool $pretty): Generator
     {
-        $ids = $this->db->posts()
-            ->whereNotIn('post_type', $this->config->array('wp-migrator.import.excluded_post_types'))
-            ->whereIn('post_status', $this->config->array('wp-migrator.import.post_statuses'))
-            ->distinct()
-            ->pluck('post_author')
-            ->map(fn (mixed $id): int => (int) $id)
-            ->filter(fn (int $id): bool => $id > 0)
-            ->values()
-            ->all();
+        $authors = $this->stats->authors(
+            $this->config->array('wp-migrator.import.excluded_post_types'),
+            $this->config->array('wp-migrator.import.post_statuses'),
+        );
 
-        if ($ids === []) {
-            return;
-        }
-
-        $rows = $this->db->table('users')->whereIn('ID', $ids)->orderBy('ID')->get(['ID', 'user_nicename', 'display_name']);
-
-        foreach ($rows as $row) {
-            $author = new AuthorReference((int) $row->ID, (string) $row->user_nicename, (string) $row->display_name);
+        foreach ($authors as $row) {
+            $author = new AuthorReference($row['id'], $row['slug'], $row['name']);
             $from = $pretty ? ['/author/'.$author->nicename] : [];
             $from[] = '/?author='.$author->id;
 

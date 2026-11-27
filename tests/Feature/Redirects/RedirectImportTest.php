@@ -158,3 +158,15 @@ it('writes nothing in a dry run', function () {
 
     expect(Redirect::count())->toBe(0);
 });
+
+it('writes the slug of an author with letters outside ASCII into the new URL once encoded', function () {
+    $mueller = $this->site->user(['user_login' => 'mueller', 'user_nicename' => 'm%c3%bcller']);
+    $this->site->post(['post_name' => 'gruss', 'post_author' => $mueller]);
+
+    importRedirects();
+
+    expect(redirectMap())->toMatchArray([
+        '/author/müller' => '/blog/author/m%C3%BCller',
+        '/?author='.$mueller => '/blog/author/m%C3%BCller',
+    ]);
+});

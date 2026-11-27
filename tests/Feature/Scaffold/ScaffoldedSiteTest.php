@@ -19,6 +19,7 @@ use ItsJustVita\WpMigrator\Models\MenuItem;
 use ItsJustVita\WpMigrator\Models\Post;
 use ItsJustVita\WpMigrator\Models\Term;
 use ItsJustVita\WpMigrator\Scaffold\Scaffold;
+use ItsJustVita\WpMigrator\Tests\Support\User;
 
 /*
  * Generates a frontend, loads the generated controller, URL helper, routes
@@ -53,6 +54,7 @@ it('serves the imported content through the generated code', function () {
             new Template('template-wide.php', 'custom', 'Wide', null, ['page']),
             new Template('search.php', 'search'),
             new Template('404.php', 'not-found'),
+            new Template('author.php', 'author'),
         ],
         templateParts: [],
         postTypes: [new PostTypeDefinition('event', 'Events', true, true, false, null, [], 'functions.php')],
@@ -72,6 +74,7 @@ it('serves the imported content through the generated code', function () {
         taxonomies: ['category' => 1],
         blocks: ['elementor/acme-hero' => ['count' => 1, 'post_ids' => [9]]],
         frontPage: 'welcome',
+        authors: ['alice' => 5, 'ghost' => 99],
     );
 
     $scaffold = new Scaffold(new Frontend($theme, $site, config()), ['elementor/acme-hero' => ['hero_title' => 'text', 'color' => 'value']]);
@@ -87,6 +90,8 @@ it('serves the imported content through the generated code', function () {
     config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
     require_once $root.'/app/Http/Controllers/WpController.php';
     require_once $root.'/app/Support/WpUrl.php';
+    // The route a new application has for "/"; the routes loaded after it replace it.
+    Route::middleware('web')->get('/', fn (): string => 'LARAVEL WELCOME');
     Route::middleware('web')->group($root.'/routes/wp.php');
     app('router')->getRoutes()->refreshNameLookups();
     View::addLocation($root.'/resources/views');
@@ -99,10 +104,14 @@ it('serves the imported content through the generated code', function () {
     scaffoldedPost('page', 'Team', 'team', ['parent_id' => $about->id, 'template' => 'template-wide.php']);
     scaffoldedPost('page', 'Contact', 'contact');
     scaffoldedPost('page', 'Büro', 'b%c3%bcro');
-    $hello = scaffoldedPost('post', 'Hello world', 'hello', ['blocks' => [
+    $alice = User::create(['name' => 'Alice <A>', 'email' => 'alice@example.com', 'password' => 'secret']);
+    $bob = User::create(['name' => 'Bob', 'email' => 'bob@example.com', 'password' => 'secret']);
+    app(ImportMap::class)->record(SourceType::User, 5, $alice, 'x');
+    $hello = scaffoldedPost('post', 'Hello world', 'hello', ['author_id' => $alice->id, 'blocks' => [
         ['name' => 'elementor/acme-hero', 'attrs' => ['hero_title' => 'Big <em>news</em>', 'color' => 'red'], 'innerHTML' => '', 'innerBlocks' => []],
     ]]);
-    scaffoldedPost('post', 'Not ready', 'not-ready', ['status' => 'draft']);
+    scaffoldedPost('post', 'By someone else', 'by-bob', ['author_id' => $bob->id]);
+    scaffoldedPost('post', 'Not ready', 'not-ready', ['status' => 'draft', 'author_id' => $alice->id]);
     $gig = scaffoldedPost('event', 'Summer gig', 'summer-gig');
     scaffoldedPost('lead', 'Hello from a form entry', 'lead-1');
     app(ImportMap::class)->record(SourceType::Post, 77, $gig, 'x');
@@ -112,7 +121,7 @@ it('serves the imported content through the generated code', function () {
     $parent = MenuItem::create(['menu_id' => $menu->id, 'title' => 'About us', 'url' => '/about', 'order' => 1]);
     MenuItem::create(['menu_id' => $menu->id, 'parent_id' => $parent->id, 'title' => 'Team', 'url' => '/about/team', 'order' => 1]);
 
-    $this->get('/')->assertOk()->assertSee('<h1>Welcome</h1>', false)->assertSee('<title>Welcome</title>', false)
+    $this->get('/')->assertOk()->assertSee('<h1>Welcome</h1>', false)->assertSee('<title>Welcome</title>', false)->assertDontSee('LARAVEL WELCOME')
         ->assertSee('<a href="/about" >About us</a>', false)->assertSee('<a href="/about/team" >Team</a>', false);
     $this->get('/about/team')->assertOk()->assertSee('<main class="template-wide">', false)->assertSee('Body of Team');
     $this->get('/about')->assertOk()->assertSee('<main class="">', false);
@@ -129,6 +138,10 @@ it('serves the imported content through the generated code', function () {
     $this->get('/blog/category/news')->assertOk()->assertSee('<h1>News</h1>', false)->assertSee('Hello world');
     $this->get('/search?q=hello')->assertOk()->assertSee('Hello world')->assertDontSee('Summer gig')->assertDontSee('form entry');
     $this->get('/search')->assertOk()->assertSee('Nothing found.');
+    $this->get('/blog/author/alice')->assertOk()->assertSee('<h1>Alice &lt;A&gt;</h1>', false)->assertSee('<title>Alice &lt;A&gt;</title>', false)
+        ->assertSee('Hello world')->assertDontSee('By someone else')->assertDontSee('Not ready')->assertDontSee('Summer gig');
+    $this->get('/blog/author/ghost')->assertNotFound();
+    $this->get('/blog/author/nobody')->assertNotFound();
     $this->get('/nowhere/at-all')->assertNotFound()->assertSee('Page not found');
 
     File::deleteDirectory($root);

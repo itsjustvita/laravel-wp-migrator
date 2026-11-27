@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 use ItsJustVita\WpMigrator\Inventory\Theme\PostTypeDefinition;
 use ItsJustVita\WpMigrator\Inventory\Theme\Template;
 use ItsJustVita\WpMigrator\Inventory\Theme\ThemeInventory;
+use ItsJustVita\WpMigrator\Mapping\DefaultUserMapper;
 
 /**
  * The routes, views and layouts the site needs in Laravel, worked out from
@@ -200,6 +201,17 @@ final class Frontend
         }
 
         return new FrontendItem('author', 'Author archive', null, is_string($pattern) ? $pattern : null, 'authors.show', $author ?? $this->find('archive') ?? $this->find('index'));
+    }
+
+    /**
+     * The attribute of the user model the import writes the display name to.
+     */
+    public function authorNameAttribute(): ?string
+    {
+        $attributes = $this->config->get('wp-migrator.users.attributes');
+        $attribute = array_search('display_name', is_array($attributes) ? $attributes : DefaultUserMapper::DEFAULT_ATTRIBUTES, true);
+
+        return is_string($attribute) && $attribute !== '' ? $attribute : null;
     }
 
     public function search(): ?FrontendItem

@@ -40,7 +40,7 @@ it('writes the frontend and loads its routes', function () {
         ->toMatch('/app\/Http\/Controllers\/WpController\.php \.+ created/')
         ->toMatch('/resources\/views\/vendor\/wp-migrator\/blocks\/elementor\/acme-hero\.blade\.php[ .]*created/')
         ->toMatch('/routes\/web\.php \.+ loads routes\/wp\.php/')
-        ->toContain('routes/web.php has its own route for "/", which comes first; remove it to show the front page.')
+        ->not->toContain('route for "/"')
         ->toContain('The frontend is scaffolded.')
         ->and(file_get_contents($this->root.'/routes/web.php'))->toEndWith("\nrequire __DIR__.'/wp.php';\n")
         ->and(file_exists($this->root.'/resources/views/layouts/wp.blade.php'))->toBeTrue()
@@ -63,6 +63,15 @@ it('keeps existing files unless forced', function () {
 
     expect(Artisan::output())->toMatch('/resources\/views\/pages\/show\.blade\.php \.+ replaced/')
         ->and(file_get_contents($this->root.'/resources/views/pages/show.blade.php'))->not->toBe('mine');
+});
+
+it('says when a later route for the front page replaces the scaffolded one', function () {
+    Artisan::call('wp:scaffold', ['--theme' => scaffoldTheme()]);
+    file_put_contents($this->root.'/routes/web.php', "\nRoute::view('/', 'landing');\n", FILE_APPEND);
+
+    Artisan::call('wp:scaffold', ['--theme' => scaffoldTheme()]);
+
+    expect(Artisan::output())->toContain('routes/web.php defines a route for "/" after it loads routes/wp.php, and the later route wins. Move it up or remove it to show the front page.');
 });
 
 it('says when there is no routes/web.php', function () {

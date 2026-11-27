@@ -78,18 +78,22 @@ class ScaffoldCommand extends Command
         }
 
         $routes = $files->get($web);
-        $notes = [];
+        $loaded = strpos($routes, "'/wp.php'");
 
-        if (! str_contains($routes, "'/wp.php'")) {
+        if ($loaded === false) {
+            // Loaded last, the front page replaces an earlier route for "/", such as the welcome page of a new application.
             $files->append($web, "\nrequire __DIR__.'/wp.php';\n");
             $this->components->twoColumnDetail('routes/web.php', '<fg=green>loads routes/wp.php</>');
+
+            return [];
         }
 
-        if (preg_match('/Route::(get|view|any|match)\(\s*[\'"]\/[\'"]/', $routes) === 1) {
-            $notes[] = 'routes/web.php has its own route for "/", which comes first; remove it to show the front page.';
+        // Of two routes for the same URL, the one defined later answers.
+        if (preg_match('/Route::(?:(?:get|view|any)\(|match\(\s*\[[^\]]*\]\s*,)\s*[\'"]\/[\'"]/', substr($routes, $loaded)) === 1) {
+            return ['routes/web.php defines a route for "/" after it loads routes/wp.php, and the later route wins. Move it up or remove it to show the front page.'];
         }
 
-        return $notes;
+        return [];
     }
 
     /**

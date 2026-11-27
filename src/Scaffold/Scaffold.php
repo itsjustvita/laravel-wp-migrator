@@ -43,6 +43,9 @@ final class Scaffold
 
     private const string SLUG = '/^[\p{L}\p{N}_-]{1,200}$/u';
 
+    /** More authors than this are not listed in the controller. */
+    private const int MAX_AUTHORS = 500;
+
     /** @var list<string> */
     private array $notes = [];
 
@@ -79,10 +82,11 @@ final class Scaffold
         }
 
         $search = $this->frontend->search();
+        [$author, $authors] = $this->authorArchive();
 
         $files = [
-            'routes/wp.php' => $this->routesFile($singles, $archives, $terms, $search),
-            'app/Http/Controllers/WpController.php' => $this->controller($singles, $terms),
+            'routes/wp.php' => $this->routesFile($singles, $archives, $terms, $search, $author),
+            'app/Http/Controllers/WpController.php' => $this->controller($singles, $terms, $author === null ? null : $authors),
             'app/Support/WpUrl.php' => $this->urlHelper(),
             'resources/views/layouts/wp.blade.php' => $this->layout(),
             'resources/views/components/wp/header.blade.php' => $this->header(),
@@ -120,6 +124,10 @@ final class Scaffold
             $files[$search->viewPath()] = $this->search($search);
         }
 
+        if ($author !== null) {
+            $files[$author->viewPath()] = $this->author($author);
+        }
+
         $notFound = $this->frontend->notFound();
 
         if ($notFound !== null) {
@@ -130,10 +138,6 @@ final class Scaffold
             if ($this->usable($name, self::BLOCK, 'block')) {
                 $files[$this->blockViewPath($name)] = $this->blockView($name, $usage['count']);
             }
-        }
-
-        if ($this->frontend->authorArchive() !== null) {
-            $this->notes[] = 'Author archives are not scaffolded: the imported users keep no slug to find them by.';
         }
 
         return $files;
@@ -175,6 +179,55 @@ final class Scaffold
         }
 
         return $singles;
+    }
+
+    /**
+     * The author archive, when it can get a route, and the authors it finds
+     * by their slug: slug => user ID on the old site. The imported users
+     * keep no slug, so the controller lists them; a pattern with {id} needs
+     * no list.
+     *
+     * @return array{0: FrontendItem|null, 1: array<array-key, int>}
+     */
+    private function authorArchive(): array
+    {
+        $archive = $this->frontend->authorArchive();
+
+        if ($archive === null || $archive->uri === null) {
+            return [null, []];
+        }
+
+        if (str_contains($archive->uri, '{id}')) {
+            return [$archive, []];
+        }
+
+        if (! str_contains($archive->uri, '{slug}')) {
+            $this->notes[] = 'urls.author_pattern has neither {slug} nor {id}, so the author archives got no route.';
+
+            return [null, []];
+        }
+
+        if (! $this->frontend->site->reachable) {
+            $this->notes[] = 'The author archives got no route: their slugs are read from the source database, which could not be opened.';
+
+            return [null, []];
+        }
+
+        $authors = [];
+
+        foreach ($this->frontend->site->authors as $slug => $id) {
+            if ($this->usable((string) $slug, self::SLUG, 'author')) {
+                $authors[$slug] = $id;
+            }
+        }
+
+        if (count($authors) > self::MAX_AUTHORS) {
+            $this->notes[] = sprintf('The author archives got no route: %d authors are too many to list in the controller. Use {id} in urls.author_pattern, or find them by a column of your own.', count($authors));
+
+            return [null, []];
+        }
+
+        return [$authors === [] ? null : $archive, $authors];
     }
 
     /**
@@ -226,7 +279,7 @@ final class Scaffold
      * @param  array<string, FrontendItem>  $archives
      * @param  list<FrontendItem>  $terms
      */
-    private function routesFile(array $singles, array $archives, array $terms, ?FrontendItem $search): string
+    private function routesFile(array $singles, array $archives, array $terms, ?FrontendItem $search, ?FrontendItem $author): string
     {
         $routes = [['/', 'home', [], 'wp.home']];
 
@@ -246,9 +299,16 @@ final class Scaffold
             $routes[] = [(string) $term->uri, 'term', ['taxonomy' => (string) $term->subject], 'wp.term.'.$term->subject];
         }
 
-        // Patterns that start with a parameter, such as /{path}, match almost
-        // anything, so they come last.
-        usort($routes, fn (array $a, array $b): int => (int) $this->catchAll($a[0]) <=> (int) $this->catchAll($b[0]));
+        if ($author !== null) {
+            $routes[] = [(string) $author->uri, 'author', [], 'wp.author'];
+        }
+
+        // The first route that matches answers. Patterns that start with a
+        // parameter, such as /{path}, match almost anything and come last.
+        // Before them come those with {path}, which takes whole paths: the
+        // ones with more fixed segments first, so /blog/{path} does not
+        // hide /blog/category/{path}.
+        usort($routes, fn (array $a, array $b): int => $this->precedence($a[0]) <=> $this->precedence($b[0]));
 
         $lines = [];
         $seen = [];
@@ -284,8 +344,8 @@ final class Scaffold
             <?php
 
             // The routes of the imported content, from the URL patterns in config/wp-migrator.php.
-            // Generated by php artisan wp:scaffold. Routes whose pattern starts with a parameter come
-            // last, because they match almost any path.
+            // Generated by php artisan wp:scaffold. The first route that matches answers, so patterns
+            // that take whole paths come late, and those that start with a parameter last.
 
             use App\\Http\\Controllers\\WpController;
             use Illuminate\\Support\\Facades\\Route;
@@ -293,6 +353,24 @@ final class Scaffold
             {$this->join($lines, '')}
 
             PHP;
+    }
+
+    /**
+     * @return array{int, int, int}
+     */
+    private function precedence(string $uri): array
+    {
+        if ($this->catchAll($uri)) {
+            return [1, 0, 0];
+        }
+
+        if (! str_contains($uri, '{path}')) {
+            return [0, 0, 0];
+        }
+
+        $fixed = count(array_filter(explode('/', trim($uri, '/')), fn (string $segment): bool => ! str_starts_with($segment, '{')));
+
+        return [0, 1, -$fixed];
     }
 
     private function catchAll(string $uri): bool
@@ -303,8 +381,9 @@ final class Scaffold
     /**
      * @param  array<string, FrontendItem>  $singles
      * @param  list<FrontendItem>  $terms
+     * @param  array<array-key, int>|null  $authors  null without an author archive
      */
-    private function controller(array $singles, array $terms): string
+    private function controller(array $singles, array $terms, ?array $authors): string
     {
         $types = $this->export(array_map(fn (FrontendItem $single): string => $this->frontend->plural((string) $single->subject), $singles));
         $taxonomies = [];
@@ -322,6 +401,43 @@ final class Scaffold
         $front = var_export($this->frontend->site->frontPage, true);
         $taxonomies = $this->export($taxonomies);
         $layouts = $this->export($layouts);
+        $authorList = '';
+        $authorAction = '';
+
+        if ($authors !== null) {
+            $authorList = <<<PHP
+
+                    /** The authors with an archive, by the slug in its URL: their user ID on the old site. */
+                    private const array AUTHORS = {$this->export($authors)};
+
+                PHP;
+
+            $authorAction = <<<'PHP'
+
+                    /**
+                     * The posts of an author. The import map leads from the ID the
+                     * author had on the old site to the imported user.
+                     */
+                    public function author(Request $request): View
+                    {
+                        $id = $request->route('id') ?? self::AUTHORS[(string) $request->route('slug')] ?? null;
+
+                        $author = $id === null ? null : ImportMapEntry::query()
+                            ->where('source_type', SourceType::User)
+                            ->where('source_id', (int) $id)
+                            ->first()?->target;
+
+                        abort_if($author === null, 404);
+
+                        return view('authors.show', [
+                            'author' => $author,
+                            'posts' => $this->published('post')->where('author_id', $author->getKey())->latest('published_at')->paginate(self::PER_PAGE),
+                            'layout' => 'layouts.wp',
+                        ]);
+                    }
+
+                PHP;
+        }
 
         return <<<PHP
             <?php
@@ -357,7 +473,7 @@ final class Scaffold
 
                 /** The layout of each page template, by the value stored in posts.template. */
                 private const array LAYOUTS = {$layouts};
-
+            {$authorList}
                 private const int PER_PAGE = 10;
 
                 public function home(): View
@@ -424,7 +540,7 @@ final class Scaffold
 
                     return view('search', ['query' => \$query, 'posts' => \$posts, 'layout' => 'layouts.wp']);
                 }
-
+            {$authorAction}
                 /**
                  * The published post a URL leads to: by its ID on the old site, by the
                  * slugs of its parents and its own, or by its slug.
@@ -822,6 +938,28 @@ final class Scaffold
             BLADE;
     }
 
+    private function author(FrontendItem $author): string
+    {
+        $from = $this->from($author->template);
+        $attribute = $this->frontend->authorNameAttribute();
+        $title = $attribute === null ? "'Author'" : sprintf('$author->getAttribute(%s)', $this->php($attribute));
+        $heading = $attribute === null ? 'Author' : '{{ '.$title.' }}';
+
+        return <<<BLADE
+            {{-- The archive of an author{$from}. Generated by php artisan wp:scaffold. --}}
+            @extends(\$layout ?? 'layouts.wp')
+
+            @section('title', {$title})
+
+            @section('content')
+                <h1>{$heading}</h1>
+
+                @include('components.wp.post-list', ['posts' => \$posts])
+            @endsection
+
+            BLADE;
+    }
+
     private function search(FrontendItem $search): string
     {
         $from = $this->from($search->template);
@@ -953,7 +1091,7 @@ final class Scaffold
     }
 
     /**
-     * @param  array<array-key, string>  $values
+     * @param  array<array-key, string|int>  $values
      */
     private function export(array $values): string
     {

@@ -98,6 +98,40 @@ class SourceStats
         ])->all());
     }
 
+    /**
+     * The users with at least one post of the given kind, by ID. WP has an
+     * author archive for them and for nobody else.
+     *
+     * @param  array<array-key, mixed>  $excludedTypes
+     * @param  array<array-key, mixed>  $statuses
+     * @return list<array{id: int, slug: string, name: string}>
+     */
+    public function authors(array $excludedTypes, array $statuses): array
+    {
+        $ids = $this->db->posts()
+            ->whereNotIn('post_type', $excludedTypes)
+            ->whereIn('post_status', $statuses)
+            ->distinct()
+            ->orderBy('post_author')
+            ->pluck('post_author')
+            ->map(fn (mixed $id): int => is_numeric($id) ? (int) $id : 0)
+            ->all();
+
+        $authors = [];
+
+        foreach (array_chunk($ids, 500) as $chunk) {
+            foreach ($this->db->table('users')->whereIn('ID', $chunk)->orderBy('ID')->get(['ID', 'user_nicename', 'display_name']) as $row) {
+                $authors[] = [
+                    'id' => (int) $row->ID,
+                    'slug' => rawurldecode((string) $row->user_nicename),
+                    'name' => (string) $row->display_name,
+                ];
+            }
+        }
+
+        return $authors;
+    }
+
     public function mediaCount(): int
     {
         return $this->db->table('posts')->where('post_type', 'attachment')->count();

@@ -266,3 +266,24 @@ it('reads the users and administrators, marking excluded ones', function () {
             ['login' => 'intruder', 'registered' => '2026-05-04', 'excluded' => true],
         ]);
 });
+
+it('reads the authors that have an archive, by its slug', function () {
+    config()->set('wp-migrator.users.excluded', ['intruder']);
+    $site = $this->source();
+    $zoe = $site->user(['user_login' => 'zoe']);
+    $alice = $site->user(['user_login' => 'alice']);
+    $mueller = $site->user(['user_login' => 'mueller', 'user_nicename' => 'm%c3%bcller']);
+    $reader = $site->user(['user_login' => 'reader']);
+    $trasher = $site->user(['user_login' => 'trasher']);
+    $intruder = $site->user(['user_login' => 'intruder']);
+    $site->post(['post_author' => $zoe]);
+    $site->post(['post_author' => $alice]);
+    $site->post(['post_author' => $alice]);
+    $site->page(['post_author' => $mueller]);
+    $site->post(['post_author' => $intruder]);
+    $site->post(['post_author' => $trasher, 'post_status' => 'trash']);
+    $site->post(['post_author' => $reader, 'post_type' => 'wp_block']);
+    $site->post(['post_author' => 0]);
+
+    expect(readSite()->authors)->toBe(['alice' => $alice, 'müller' => $mueller, 'zoe' => $zoe]);
+});

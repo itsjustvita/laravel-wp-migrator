@@ -76,6 +76,7 @@ class SiteInventory
                 elementorPages: $elementorPages,
                 suspicious: $this->suspicious->findings(),
                 frontPage: $this->frontPage(),
+                authors: $this->authors(),
             );
         } catch (Throwable $exception) {
             return SiteFacts::unreachable($exception->getMessage());
@@ -296,6 +297,28 @@ class SiteInventory
             ->value('post_name');
 
         return is_string($slug) && $slug !== '' ? $slug : null;
+    }
+
+    /**
+     * The users with an author archive on the old site, by its slug, without
+     * those the import leaves out.
+     *
+     * @return array<array-key, int>
+     */
+    private function authors(): array
+    {
+        $excluded = $this->excluded->ids();
+        $authors = [];
+
+        foreach ($this->stats->authors($this->config->array('wp-migrator.import.excluded_post_types'), $this->config->array('wp-migrator.import.post_statuses')) as $author) {
+            if ($author['slug'] !== '' && ! in_array($author['id'], $excluded, true)) {
+                $authors[$author['slug']] = $author['id'];
+            }
+        }
+
+        ksort($authors, SORT_STRING);
+
+        return $authors;
     }
 
     /**

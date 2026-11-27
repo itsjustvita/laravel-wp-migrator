@@ -116,12 +116,16 @@ php artisan wp:scaffold --force   # also replace files that exist
 It reads the theme and the source database like `wp:inventory`, and the imported content, and writes:
 
 - `routes/wp.php` with routes from the URL patterns, and a line in `routes/web.php` that loads it
-- `app/Http/Controllers/WpController.php` for the front page, single posts and pages, archives, taxonomy archives and search, and `app/Support/WpUrl.php` for links to posts and terms
+- `app/Http/Controllers/WpController.php` for the front page, single posts and pages, archives, taxonomy and author archives and search, and `app/Support/WpUrl.php` for links to posts and terms
 - views under the names the migration plan uses, such as `pages/show`, `events/show` and `posts/index`, each noting the theme file it replaces
 - the layout `layouts/wp` with the SEO tags, a layout for each page template, and components for the header, the footer and the menus of the theme's locations
 - a view for each block without one; for Elementor widgets it lists the settings the imported widgets hold
 
-Run it after the import. The files belong to your application: change them as you like, `wp:scaffold` keeps files that exist unless you pass `--force`. Names from the old site end up in code, and a hacked site controls them, so post types, taxonomies, menu locations and widget settings whose names do not match the key formats of WP are left out with a note, and every other text is escaped. The views of widgets print their fields escaped; print fields whose HTML you trust with `{!! !!}`. Remove the default route for `/` from `routes/web.php` so the front page shows. Author archives are not scaffolded, since the imported users keep no slug to find them by.
+Run it after the import. The files belong to your application: change them as you like, `wp:scaffold` keeps files that exist unless you pass `--force`. Names from the old site end up in code, and a hacked site controls them, so post types, taxonomies, menu locations, author slugs and widget settings whose names do not match the key formats of WP are left out with a note, and every other text is escaped. The views of widgets print their fields escaped; print fields whose HTML you trust with `{!! !!}`.
+
+The routes are loaded at the end of `routes/web.php`, so the front page replaces an earlier route for `/`, such as the welcome page of a new application. A route for `/` that you define after that line wins instead, and the command says so.
+
+The imported users keep no slug, so the controller lists the authors that have posts, each slug with the ID the user had on the old site, and finds the user through the import map. Scaffold again with `--force` when authors were added, or use `{id}` in `urls.author_pattern`, which needs no list.
 
 ### Suspicious content
 
