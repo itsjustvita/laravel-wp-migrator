@@ -2,7 +2,7 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses [Semantic Versioning](https://semver.org/). Since 1.0, breaking changes to the public API come only with a new major version; the README lists what the public API covers.
 
-## [Unreleased]
+## [1.6.0] - 2026-11-27
 
 ### Added
 
@@ -118,6 +118,7 @@ The first public version.
 - The theme inventory and the migration plan generator.
 - Content of page builders, WooCommerce, multilingual plugins and multisite installations is detected and reported, but not migrated.
 
+[1.6.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/itsjustvita/laravel-wp-migrator/compare/v1.3.0...v1.3.1
