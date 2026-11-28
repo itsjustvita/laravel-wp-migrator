@@ -29,12 +29,48 @@ class SeoSite
 
     public function siteName(): string
     {
-        return $this->remember('blogname', fn (): string => (string) $this->db->option('blogname'));
+        return $this->remember('blogname', fn (): string => $this->text('blogname'));
     }
 
     public function siteDescription(): string
     {
-        return $this->remember('blogdescription', fn (): string => (string) $this->db->option('blogdescription'));
+        return $this->remember('blogdescription', fn (): string => $this->text('blogdescription'));
+    }
+
+    /**
+     * The plugin whose site-wide settings the old site applied to posts
+     * without settings of their own: the first in order that has any. Null
+     * when the site printed the titles of WP itself.
+     */
+    public function defaultsPlugin(): ?SeoPlugin
+    {
+        foreach ($this->pluginOrder() as $plugin) {
+            if ($this->settings($plugin) !== []) {
+                return $plugin;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The titles and meta settings of the plugin, by the keys the plugin uses.
+     *
+     * @return array<array-key, mixed>
+     */
+    public function settings(SeoPlugin $plugin): array
+    {
+        return $this->remember('settings.'.$plugin->value, fn (): array => $this->arrayOption(
+            $plugin === SeoPlugin::RankMath ? 'rank-math-options-titles' : 'wpseo_titles',
+        ));
+    }
+
+    /**
+     * The ID of the page WP shows on the front page, 0 for the latest posts.
+     */
+    public function frontPageId(): int
+    {
+        return $this->remember('front', fn (): int => $this->db->option('show_on_front') === 'page' ? (int) $this->db->option('page_on_front') : 0);
     }
 
     public function dateFormat(): string
@@ -51,12 +87,12 @@ class SeoSite
     {
         return $this->remember('separator.'.$plugin->value, function () use ($plugin): string {
             if ($plugin === SeoPlugin::RankMath) {
-                $separator = $this->arrayOption('rank-math-options-titles')['title_separator'] ?? null;
+                $separator = $this->settings($plugin)['title_separator'] ?? null;
 
                 return is_string($separator) && $separator !== '' ? $separator : '-';
             }
 
-            $setting = $this->arrayOption('wpseo_titles')['separator'] ?? null;
+            $setting = $this->settings($plugin)['separator'] ?? null;
 
             return is_string($setting) ? (self::YOAST_SEPARATORS[$setting] ?? '-') : '-';
         });
@@ -109,6 +145,15 @@ class SeoSite
         }
 
         return $this->cache[$key];
+    }
+
+    /**
+     * A text option as the old site printed it. WP stores the site name and
+     * the tagline with HTML entities.
+     */
+    private function text(string $option): string
+    {
+        return html_entity_decode((string) $this->db->option($option), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     /**

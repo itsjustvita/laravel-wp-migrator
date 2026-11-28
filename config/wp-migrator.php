@@ -250,6 +250,11 @@ return [
 
     'seo' => [
         'enabled' => true,
+
+        // Posts without a title, a description or a robots setting of their
+        // own get what the old site printed for them: from the templates of
+        // the SEO plugin for the post type, or the title of WP itself.
+        'site_defaults' => true,
     ],
 
     /*

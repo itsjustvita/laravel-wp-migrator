@@ -2,6 +2,18 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses [Semantic Versioning](https://semver.org/). Since 1.0, breaking changes to the public API come only with a new major version; the README lists what the public API covers.
 
+## [Unreleased]
+
+### Changed
+
+- Posts without SEO settings of their own keep the title, the description and the robots setting the old site printed for them. The import applies the settings of Yoast SEO or Rank Math for the post type: the title and description templates, and whether the post type is kept out of the index. Without an SEO plugin it stores the title WP printed itself, "Title – Site name", and "Site name – Tagline" for the page on the front page. Until now such posts got the bare post title and no description. Run `wp:import --force` to apply this to content that is imported already; `seo.site_defaults` switches it off.
+- The `%excerpt%` variable of Rank Math holds what Rank Math puts there: the excerpt, or the first paragraph of the content, or the first with the focus keyword. Descriptions that Rank Math builds from a template are cut at 160 characters, at a word.
+
+### Fixed
+
+- Rank Math variables with an argument, such as `%date(F Y)%` or `%customfield(price)%`, are recognised. They used to stay in the title as written.
+- The site name and the tagline are written without the HTML entities WP stores them with, so "Tom & Jerry" no longer shows up as "Tom &amp; Jerry" in titles.
+
 ## [1.6.0] - 2026-11-27
 
 ### Added

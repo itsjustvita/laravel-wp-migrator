@@ -14,6 +14,7 @@ enum SeoPlugin: string
      */
     public function variablePattern(): string
     {
-        return $this === self::Yoast ? '/%%([a-z0-9_]+)%%/i' : '/%([a-z0-9_]+)%/i';
+        // Rank Math variables can take an argument, as in %date(F Y)% or %customfield(price)%.
+        return $this === self::Yoast ? '/%%([a-z0-9_]+)%%/i' : '/%([a-z0-9_]+)(?:\([^()%]*\))?%/i';
     }
 }

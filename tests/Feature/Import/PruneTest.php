@@ -464,7 +464,7 @@ it('deletes the models of custom mappers through Eloquent', function () {
 
     expect(Event::query()->pluck('title')->all())->toBe(['Festival'])
         ->and($deleting)->toBe(['Concert'])
-        ->and(SeoMeta::count())->toBe(0)
+        ->and(SeoMeta::query()->pluck('title')->all())->toBe(['Festival – Acme'])
         ->and($report->removedItems())->toBe([['kind' => 'posts', 'source_id' => $gone, 'what' => 'Event #'.$event->id]]);
 });
 

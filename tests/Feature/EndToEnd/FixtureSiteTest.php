@@ -203,7 +203,10 @@ it('imports the yoast and rank math settings', function () {
         ->and($block?->robots)->toBe('nofollow')
         ->and($block?->og_image_id)->toBe(fixtureMedia('hero.png')->id)
         ->and($about?->title)->toBe('About us – Acme')
-        ->and($about?->description)->toBe('Who we are and what we do.');
+        ->and($about?->description)->toBe('Who we are and what we do.')
+        // No settings of its own: the title the site-wide template of Yoast gave it.
+        ->and(fixturePost('Team')->seo?->title)->toBe('Team | Acme')
+        ->and(fixturePost('Team')->seo?->description)->toBeNull();
 });
 
 it('imports the classic menu and the navigation menu', function () {

@@ -239,7 +239,9 @@ Fields without a definition in the database, such as field groups registered onl
 
 ### SEO
 
-The per-post settings of Yoast SEO and Rank Math go into `seo_meta`: title, description, canonical URL, robots and the Open Graph fields. Template variables such as `%%title%%`, `%%sep%%`, `%%sitename%%` and `%%excerpt%%`, or their Rank Math equivalents, are resolved during the import. Variables that cannot be resolved are left out and listed in the report. Posts without their own SEO title get none; the site-wide default templates of the plugins are not applied.
+The per-post settings of Yoast SEO and Rank Math go into `seo_meta`: title, description, canonical URL, robots and the Open Graph fields. Template variables such as `%%title%%`, `%%sep%%`, `%%sitename%%` and `%%excerpt%%`, or their Rank Math equivalents, are resolved during the import. Variables that cannot be resolved are left out and listed in the report.
+
+Most posts have no SEO settings of their own. The old site printed their title, description and robots from the settings of the plugin for the post type, such as the title template `%%title%% %%sep%% %%sitename%%`, and the import stores what those gave each post. A site without an SEO plugin printed the title of WP itself, "Title – Site name", which is stored the same way. So every page has the `<title>` it had before. These are fixed texts: when a post gets a new title later, change its SEO title too, or clear it. Set `seo.site_defaults` to `false` to import only what a post sets itself.
 
 Render the tags in your layout:
 
