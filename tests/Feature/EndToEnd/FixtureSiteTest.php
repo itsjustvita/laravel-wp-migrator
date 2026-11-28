@@ -200,7 +200,7 @@ it('imports the yoast and rank math settings', function () {
     expect($block?->title)->toBe('Block Story | Acme')
         ->and($block?->description)->toStartWith('A block post Read more about us.')
         ->and($block?->canonical)->toBe('/blog/block-story')
-        ->and($block?->robots)->toBe('nofollow')
+        ->and($block?->robots)->toBe('nofollow, max-image-preview:large')
         ->and($block?->og_image_id)->toBe(fixtureMedia('hero.png')->id)
         ->and($about?->title)->toBe('About us – Acme')
         ->and($about?->description)->toBe('Who we are and what we do.')

@@ -7,6 +7,7 @@ All notable changes to this package are documented here. The format follows [Kee
 ### Changed
 
 - Posts without SEO settings of their own keep the title, the description and the robots setting the old site printed for them. The import applies the settings of Yoast SEO or Rank Math for the post type: the title and description templates, and whether the post type is kept out of the index. Without an SEO plugin it stores the title WP printed itself, "Title – Site name", and "Site name – Tagline" for the page on the front page. Until now such posts got the bare post title and no description. Run `wp:import --force` to apply this to content that is imported already; `seo.site_defaults` switches it off.
+- The robots meta of a post holds what the old site printed, without `index`, `follow` and limits of `-1`, which change nothing. That includes `max-image-preview:large`, which WP prints on every page so search engines may show large image previews, and the previews Rank Math sets for a post, a post type or the site. The robots Rank Math sets for the whole site are applied as well.
 - The `%excerpt%` variable of Rank Math holds what Rank Math puts there: the excerpt, or the first paragraph of the content, or the first with the focus keyword. Descriptions that Rank Math builds from a template are cut at 160 characters, at a word.
 
 ### Fixed

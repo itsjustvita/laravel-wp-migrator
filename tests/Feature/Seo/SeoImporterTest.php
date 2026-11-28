@@ -76,7 +76,7 @@ it('uses the yoast separator setting', function (string $setting, string $separa
 it('reads an explicit index setting from yoast', function () {
     $this->site->postMeta($this->post, '_yoast_wpseo_meta-robots-noindex', '2');
 
-    expect(syncSeo($this->post)?->robots)->toBe('index');
+    expect(syncSeo($this->post)?->robots)->toBe('index, max-image-preview:large');
 });
 
 it('imports the rank math fields', function () {
@@ -237,7 +237,8 @@ it('gives a post without a title of its own the title WP printed', function () {
 
     expect($seo?->title)->toBe('Hello World – Acme')
         ->and($seo?->description)->toBeNull()
-        ->and($seo?->robots)->toBeNull()
+        // WP lets search engines show large image previews on every page.
+        ->and($seo?->robots)->toBe('max-image-preview:large')
         ->and($seo?->og_title)->toBeNull();
 });
 
@@ -287,7 +288,7 @@ it('applies the templates of Rank Math for the post type', function () {
 
     expect($post?->title)->toBe('Hello World | Acme')
         ->and($post?->description)->toBe('Short summary.')
-        ->and($post?->robots)->toBeNull()
+        ->and($post?->robots)->toBe('max-image-preview:large')
         ->and(syncSeo($page)?->title)->toBe('Acme: Company')
         ->and(syncSeo($page)?->description)->toBe('About Company')
         // The excerpt comes before the template, whatever the template says.
@@ -326,17 +327,17 @@ it('applies the robots setting of Rank Math for the post type', function (mixed 
     expect(syncSeo($this->post)?->robots)->toBe($expected);
 })->with([
     'switched on' => ['on', ['noindex', 'nofollow'], 'noindex, nofollow'],
-    'switched off' => ['off', ['noindex'], null],
-    'not set' => [null, ['noindex'], null],
-    'plain index' => ['on', ['index'], null],
-    'nothing chosen' => ['on', [], null],
+    'switched off' => ['off', ['noindex'], 'max-image-preview:large'],
+    'not set' => [null, ['noindex'], 'max-image-preview:large'],
+    'plain index' => ['on', ['index'], 'max-image-preview:large'],
+    'nothing chosen' => ['on', [], 'max-image-preview:large'],
 ]);
 
 it('prefers the robots of the post over those of its post type', function () {
     rankMathSettings($this->site, ['pt_post_custom_robots' => 'on', 'pt_post_robots' => ['noindex']]);
     $this->site->postMeta($this->post, 'rank_math_robots', serialize(['index', 'noarchive']));
 
-    expect(syncSeo($this->post)?->robots)->toBe('index, noarchive');
+    expect(syncSeo($this->post)?->robots)->toBe('index, noarchive, max-image-preview:large');
 });
 
 it('applies the templates and the noindex setting of Yoast for the post type', function () {
@@ -359,7 +360,7 @@ it('applies the templates and the noindex setting of Yoast for the post type', f
         // An empty template is the one Yoast falls back to.
         ->and(syncSeo($page)?->title)->toBe('Company | Acme')
         ->and(syncSeo($page)?->description)->toBeNull()
-        ->and(syncSeo($page)?->robots)->toBeNull();
+        ->and(syncSeo($page)?->robots)->toBe('max-image-preview:large');
 });
 
 it('combines the noindex of the post type with what the post sets in Yoast', function (array $meta, ?string $expected) {
@@ -373,7 +374,7 @@ it('combines the noindex of the post type with what the post sets in Yoast', fun
 })->with([
     'nothing' => [[], 'noindex'],
     'the default' => [['_yoast_wpseo_meta-robots-noindex' => '0'], 'noindex'],
-    'index' => [['_yoast_wpseo_meta-robots-noindex' => '2'], 'index'],
+    'index' => [['_yoast_wpseo_meta-robots-noindex' => '2'], 'index, max-image-preview:large'],
     'nofollow only' => [['_yoast_wpseo_meta-robots-nofollow' => '1'], 'noindex, nofollow'],
 ]);
 
@@ -442,4 +443,98 @@ it('fills the excerpt variable of Yoast from the whole content, not from one par
     $this->site->postMeta($post, '_yoast_wpseo_metadesc', '%%excerpt%%');
 
     expect(syncSeo($post)?->description)->toBe('First paragraph. Second paragraph.');
+});
+
+// The expectations below are what real sites printed, without the directives
+// that change nothing: index, follow, max-snippet:-1 and max-video-preview:-1.
+
+it('stores the previews Yoast allowed, by what the post sets', function (array $meta, string $expected) {
+    $this->site->option('wpseo_titles', serialize(['separator' => 'sc-dash']));
+
+    foreach ($meta as $key => $value) {
+        $this->site->postMeta($this->post, $key, $value);
+    }
+
+    expect(syncSeo($this->post)?->robots)->toBe($expected);
+})->with([
+    'nothing' => [[], 'max-image-preview:large'],
+    'nofollow' => [['_yoast_wpseo_meta-robots-nofollow' => '1'], 'nofollow, max-image-preview:large'],
+    'noindex' => [['_yoast_wpseo_meta-robots-noindex' => '1'], 'noindex'],
+    'no image index' => [['_yoast_wpseo_meta-robots-adv' => 'noimageindex'], 'noimageindex, max-image-preview:none'],
+    'no snippet' => [['_yoast_wpseo_meta-robots-adv' => 'nosnippet'], 'nosnippet, max-image-preview:large'],
+    'no archive' => [['_yoast_wpseo_meta-robots-adv' => 'noarchive'], 'noarchive, max-image-preview:large'],
+]);
+
+it('stores the previews Rank Math allowed, by what the post sets', function (array $meta, string $expected) {
+    rankMathSettings($this->site, ['title_separator' => '-']);
+
+    foreach ($meta as $key => $value) {
+        $this->site->postMeta($this->post, $key, serialize($value));
+    }
+
+    expect(syncSeo($this->post)?->robots)->toBe($expected);
+})->with([
+    'nothing' => [[], 'max-image-preview:large'],
+    'nofollow' => [['rank_math_robots' => ['nofollow']], 'nofollow, max-image-preview:large'],
+    'noindex' => [['rank_math_robots' => ['noindex']], 'noindex'],
+    // Rank Math prints no previews next to nosnippet, and keeps them next to noimageindex.
+    'no snippet' => [['rank_math_robots' => ['index', 'nosnippet']], 'index, nosnippet'],
+    'no image index' => [['rank_math_robots' => ['index', 'noimageindex']], 'index, noimageindex, max-image-preview:large'],
+    'its own previews' => [['rank_math_advanced_robots' => ['max-snippet' => '50', 'max-video-preview' => '-1', 'max-image-preview' => 'standard']], 'max-snippet:50, max-image-preview:standard'],
+    'previews it cannot have' => [['rank_math_advanced_robots' => ['max-snippet' => 'lots', 'max-video-preview' => '0', 'max-image-preview' => 'huge"><script>', 'something-else' => 'x']], 'max-image-preview:large'],
+]);
+
+it('falls back to the previews of the site when those of a post cannot be read', function () {
+    rankMathSettings($this->site, ['advanced_robots_global' => ['max-snippet' => '100', 'max-video-preview' => '-1', 'max-image-preview' => 'standard']]);
+    $this->site->postMeta($this->post, 'rank_math_advanced_robots', 'a:3:{s:11:"max-snippet";');
+    $context = importContext('posts');
+
+    expect(syncSeo($this->post, $context)?->robots)->toBe('max-snippet:100, max-image-preview:standard')
+        ->and($context->report->errors())->toBe([]);
+});
+
+it('stores the previews Rank Math allowed for the site and for a post type', function () {
+    rankMathSettings($this->site, [
+        'advanced_robots_global' => ['max-snippet' => '100', 'max-video-preview' => '-1', 'max-image-preview' => 'standard'],
+        'pt_page_custom_robots' => 'on',
+        'pt_page_robots' => ['index'],
+        'pt_page_advanced_robots' => ['max-snippet' => '-1', 'max-video-preview' => '30', 'max-image-preview' => 'none'],
+        'pt_event_custom_robots' => 'on',
+        'pt_event_robots' => ['index'],
+        'pt_book_custom_robots' => 'off',
+        'pt_book_advanced_robots' => ['max-snippet' => '5', 'max-video-preview' => '5', 'max-image-preview' => 'none'],
+    ]);
+    $page = $this->site->page(['post_title' => 'Company']);
+    $event = $this->site->post(['post_title' => 'Gig', 'post_type' => 'event']);
+    $book = $this->site->post(['post_title' => 'Novel', 'post_type' => 'book']);
+    $own = $this->site->page(['post_title' => 'Own']);
+    $this->site->postMeta($own, 'rank_math_advanced_robots', serialize(['max-snippet' => '-1', 'max-video-preview' => '-1', 'max-image-preview' => 'large']));
+
+    expect(syncSeo($this->post)?->robots)->toBe('max-snippet:100, max-image-preview:standard')
+        ->and(syncSeo($page)?->robots)->toBe('max-video-preview:30, max-image-preview:none')
+        // Switched on for the type, but without previews of its own: those of the site.
+        ->and(syncSeo($event)?->robots)->toBe('max-snippet:100, max-image-preview:standard')
+        // Not switched on for the type: its previews do not count.
+        ->and(syncSeo($book)?->robots)->toBe('max-snippet:100, max-image-preview:standard')
+        ->and(syncSeo($own)?->robots)->toBe('max-image-preview:large');
+});
+
+it('applies the robots Rank Math sets for the whole site', function () {
+    rankMathSettings($this->site, ['robots_global' => ['noindex', 'nofollow'], 'pt_page_custom_robots' => 'on', 'pt_page_robots' => ['index', 'noarchive']]);
+    $page = $this->site->page(['post_title' => 'Company']);
+
+    expect(syncSeo($this->post)?->robots)->toBe('noindex, nofollow')
+        ->and(syncSeo($page)?->robots)->toBe('index, noarchive, max-image-preview:large');
+});
+
+it('stores only the previews a post sets itself when the templates of the site are left out', function () {
+    config()->set('wp-migrator.seo.site_defaults', false);
+    rankMathSettings($this->site, ['advanced_robots_global' => ['max-snippet' => '100', 'max-video-preview' => '-1', 'max-image-preview' => 'standard'], 'robots_global' => ['noindex']]);
+    $other = $this->site->post(['post_title' => 'Other']);
+    $this->site->postMeta($this->post, 'rank_math_robots', serialize(['nofollow']));
+    $this->site->postMeta($this->post, 'rank_math_advanced_robots', serialize(['max-snippet' => '50', 'max-video-preview' => '-1', 'max-image-preview' => 'standard']));
+    $this->site->postMeta($other, 'rank_math_robots', serialize(['nofollow']));
+
+    expect(syncSeo($this->post)?->robots)->toBe('nofollow, max-snippet:50, max-image-preview:standard')
+        ->and(syncSeo($other)?->robots)->toBe('nofollow');
 });

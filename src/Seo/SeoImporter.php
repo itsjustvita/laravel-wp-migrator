@@ -368,11 +368,15 @@ class SeoImporter
     }
 
     /**
-     * @param  bool  $defaults  whether the setting of the post type counts where the post has none
+     * The robots meta as the old site printed it, without what changes
+     * nothing: index, follow and limits of -1.
+     *
+     * @param  bool  $defaults  whether the settings of the site count where the post has none
      */
     private function robots(SourcePost $post, ImportContext $context, bool $defaults): ?string
     {
         $siteWide = $defaults ? $this->site->defaultsPlugin() : null;
+        $directives = [];
 
         foreach ($this->site->pluginOrder() as $plugin) {
             $directives = $plugin === SeoPlugin::Yoast
@@ -380,33 +384,160 @@ class SeoImporter
                 : $this->rankMathRobots($post, $context);
 
             if ($directives !== []) {
-                return implode(', ', array_values(array_unique($directives)));
+                break;
             }
         }
 
-        return $siteWide === SeoPlugin::RankMath ? $this->rankMathTypeRobots($post) : null;
+        if ($directives === [] && $siteWide === SeoPlugin::RankMath) {
+            $directives = $this->rankMathSiteRobots($post);
+        }
+
+        $directives = array_values(array_unique([...$directives, ...$this->previews($post, $directives, $defaults)]));
+
+        return $directives === [] ? null : implode(', ', $directives);
     }
 
     /**
      * What Rank Math sets for every post of the type, when that is switched
-     * on and says more than "index", which is the default anyway.
+     * on, or else for the whole site. A plain "index" is the default anyway.
+     *
+     * @return list<string>
      */
-    private function rankMathTypeRobots(SourcePost $post): ?string
+    private function rankMathSiteRobots(SourcePost $post): array
     {
         $settings = $this->site->settings(SeoPlugin::RankMath);
+        $directives = self::switchedOn($settings['pt_'.$post->type.'_custom_robots'] ?? null)
+            ? self::directives($settings['pt_'.$post->type.'_robots'] ?? null)
+            : [];
 
-        if (! self::switchedOn($settings['pt_'.$post->type.'_custom_robots'] ?? null)) {
-            return null;
+        if ($directives === []) {
+            $directives = self::directives($settings['robots_global'] ?? null);
         }
 
-        $robots = $settings['pt_'.$post->type.'_robots'] ?? [];
+        return $directives === ['index'] ? [] : $directives;
+    }
 
-        $directives = array_values(array_unique(array_filter(
+    /**
+     * @return list<string>
+     */
+    private static function directives(mixed $robots): array
+    {
+        return array_values(array_unique(array_filter(
             array_map(fn (mixed $directive): string => is_scalar($directive) ? trim((string) $directive) : '', is_array($robots) ? $robots : []),
             fn (string $directive): bool => $directive !== '',
         )));
+    }
 
-        return $directives === [] || $directives === ['index'] ? null : implode(', ', $directives);
+    /**
+     * How much of a page search engines may show in their results: the
+     * max-image-preview, max-snippet and max-video-preview directives. WP
+     * allows large image previews on every page, and so do the plugins
+     * unless a setting says otherwise. None of them prints these next to
+     * noindex.
+     *
+     * @param  list<string>  $directives  what the robots meta holds so far
+     * @return list<string>
+     */
+    private function previews(SourcePost $post, array $directives, bool $defaults): array
+    {
+        if (in_array('noindex', $directives, true)) {
+            return [];
+        }
+
+        $own = self::previewValues($post->meta->get('rank_math_advanced_robots'));
+
+        if (! $defaults) {
+            return self::previewDirectives($own);
+        }
+
+        return match ($this->site->defaultsPlugin()) {
+            // Rank Math prints none next to nosnippet.
+            SeoPlugin::RankMath => in_array('nosnippet', $directives, true) ? [] : self::previewDirectives($this->rankMathPreviews($post, $own)),
+            // Yoast turns noimageindex into a preview of none.
+            SeoPlugin::Yoast => [in_array('noimageindex', $directives, true) ? 'max-image-preview:none' : 'max-image-preview:large'],
+            null => ['max-image-preview:large'],
+        };
+    }
+
+    /**
+     * The previews Rank Math allows for a post: its own, those of its post
+     * type when that is switched on, or those of the site.
+     *
+     * @param  array<string, string>  $own
+     * @return array<string, string>
+     */
+    private function rankMathPreviews(SourcePost $post, array $own): array
+    {
+        if ($own !== []) {
+            return $own;
+        }
+
+        $settings = $this->site->settings(SeoPlugin::RankMath);
+
+        if (self::switchedOn($settings['pt_'.$post->type.'_custom_robots'] ?? null)) {
+            $type = self::previewValues($settings['pt_'.$post->type.'_advanced_robots'] ?? null);
+
+            if ($type !== []) {
+                return $type;
+            }
+        }
+
+        return [...['max-image-preview' => 'large'], ...self::previewValues($settings['advanced_robots_global'] ?? null)];
+    }
+
+    /**
+     * The preview settings Rank Math stores, as an array or serialized, with
+     * values a robots meta can hold. What comes from the old site ends up in
+     * a tag of the new one, so anything else is dropped.
+     *
+     * @return array<string, string>
+     */
+    private static function previewValues(mixed $stored): array
+    {
+        if (is_string($stored) && $stored !== '') {
+            try {
+                $stored = Serialized::decode($stored);
+            } catch (MalformedSerializedValue) {
+                return [];
+            }
+        }
+
+        $values = [];
+
+        foreach (is_array($stored) ? $stored : [] as $key => $value) {
+            $value = is_scalar($value) ? trim((string) $value) : '';
+
+            $valid = match ($key) {
+                'max-image-preview' => in_array($value, ['none', 'standard', 'large'], true),
+                // Rank Math leaves out 0.
+                'max-snippet', 'max-video-preview' => preg_match('/^-?[1-9][0-9]*$/', $value) === 1,
+                default => false,
+            };
+
+            if ($valid) {
+                $values[$key] = $value;
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     * @return list<string>
+     */
+    private static function previewDirectives(array $values): array
+    {
+        $directives = [];
+
+        foreach (['max-snippet', 'max-video-preview', 'max-image-preview'] as $key) {
+            // A limit of -1 is no limit, which search engines assume anyway.
+            if (isset($values[$key]) && $values[$key] !== '-1') {
+                $directives[] = $key.':'.$values[$key];
+            }
+        }
+
+        return $directives;
     }
 
     /**
